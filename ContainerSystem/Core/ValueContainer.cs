@@ -7,6 +7,7 @@ All rights reserved.
 
 using System.Text;
 using System.Text.Json;
+using ContainerSystem.Values;
 
 namespace ContainerSystem.Core;
 
@@ -74,6 +75,32 @@ public class ValueContainer
     }
 
     /// <summary>
+    /// Construct with full metadata specification.
+    /// </summary>
+    /// <param name="sourceId">Source ID</param>
+    /// <param name="sourceSubId">Source sub ID</param>
+    /// <param name="targetId">Target ID</param>
+    /// <param name="targetSubId">Target sub ID</param>
+    /// <param name="messageType">Message type</param>
+    /// <param name="version">Protocol version</param>
+    public ValueContainer(
+        string sourceId,
+        string sourceSubId,
+        string targetId,
+        string targetSubId,
+        string messageType,
+        string version = "1.0.0.0")
+    {
+        _sourceId = sourceId;
+        _sourceSubId = sourceSubId;
+        _targetId = targetId;
+        _targetSubId = targetSubId;
+        _messageType = messageType;
+        _version = version;
+        _values = new List<Value>();
+    }
+
+    /// <summary>
     /// Gets or sets the message type.
     /// </summary>
     public string MessageType
@@ -106,6 +133,20 @@ public class ValueContainer
     /// Gets the version.
     /// </summary>
     public string Version => _version;
+
+    /// <summary>
+    /// Gets all units/values in the container (read-only access).
+    /// </summary>
+    public IReadOnlyList<Value> Units
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _values.AsReadOnly();
+            }
+        }
+    }
 
     /// <summary>
     /// Sets the source IDs.
@@ -183,7 +224,13 @@ public class ValueContainer
     /// Serializes the container to a JSON string.
     /// </summary>
     /// <returns>JSON string representation</returns>
-    public string Serialize()
+    public string Serialize() => ToJson();
+
+    /// <summary>
+    /// Converts the container to JSON format (flat Python/.NET format).
+    /// </summary>
+    /// <returns>JSON string representation</returns>
+    public string ToJson()
     {
         lock (_lock)
         {
@@ -237,12 +284,121 @@ public class ValueContainer
             if (root.TryGetProperty("target_sub_id", out var tgtSubId))
                 _targetSubId = tgtSubId.GetString() ?? string.Empty;
 
-            // TODO: Parse values array
+            // Parse values array
+            if (root.TryGetProperty("values", out var valuesArray) && valuesArray.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var valueElement in valuesArray.EnumerateArray())
+                {
+                    var value = ParseValueFromJson(valueElement);
+                    if (value != null)
+                        _values.Add(value);
+                }
+            }
         }
         catch (JsonException ex)
         {
             throw new InvalidOperationException($"Failed to deserialize container: {ex.Message}", ex);
         }
+    }
+
+    /// <summary>
+    /// Parses a single value from a JSON element.
+    /// </summary>
+    /// <param name="element">JSON element containing value data</param>
+    /// <returns>Parsed Value object or null if invalid</returns>
+    private static Value? ParseValueFromJson(JsonElement element)
+    {
+        if (!element.TryGetProperty("name", out var nameElem))
+            return null;
+
+        var name = nameElem.GetString() ?? string.Empty;
+
+        if (!element.TryGetProperty("type", out var typeElem))
+            return null;
+
+        var typeId = typeElem.GetInt32();
+        var valueType = (ValueTypes)typeId;
+
+        // Handle container type (nested)
+        if (valueType == ValueTypes.ContainerValue)
+        {
+            var container = new ContainerValue(name);
+            if (element.TryGetProperty("children", out var childrenArray) && childrenArray.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var childElement in childrenArray.EnumerateArray())
+                {
+                    var child = ParseValueFromJson(childElement);
+                    if (child != null)
+                        container.Add(child);
+                }
+            }
+            return container;
+        }
+
+        // Get data element
+        if (!element.TryGetProperty("data", out var dataElem))
+            return null;
+
+        // Parse based on value type
+        try
+        {
+            return valueType switch
+            {
+                ValueTypes.BoolValue => new BoolValue(name, dataElem.GetBoolean()),
+                ValueTypes.ShortValue => new ShortValue(name, dataElem.GetInt16()),
+                ValueTypes.UShortValue => new UShortValue(name, dataElem.GetUInt16()),
+                ValueTypes.IntValue => new IntValue(name, dataElem.GetInt32()),
+                ValueTypes.UIntValue => new UIntValue(name, dataElem.GetUInt32()),
+                ValueTypes.LongValue => new LongValue(name, dataElem.GetInt64()),
+                ValueTypes.ULongValue => new ULongValue(name, dataElem.GetUInt64()),
+                ValueTypes.LLongValue => new LLongValue(name, dataElem.GetInt64()),
+                ValueTypes.ULLongValue => new ULLongValue(name, dataElem.GetUInt64()),
+                ValueTypes.FloatValue => new FloatValue(name, dataElem.GetSingle()),
+                ValueTypes.DoubleValue => new DoubleValue(name, dataElem.GetDouble()),
+                ValueTypes.StringValue => new StringValue(name, dataElem.GetString() ?? string.Empty),
+                ValueTypes.BytesValue => ParseBytesValue(name, element),
+                _ => null
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Parses a BytesValue with base64 decoding support.
+    /// </summary>
+    /// <param name="name">Value name</param>
+    /// <param name="element">JSON element</param>
+    /// <returns>BytesValue or null</returns>
+    private static BytesValue? ParseBytesValue(string name, JsonElement element)
+    {
+        if (!element.TryGetProperty("data", out var dataElem))
+            return null;
+
+        var dataStr = dataElem.GetString();
+        if (string.IsNullOrEmpty(dataStr))
+            return new BytesValue(name, Array.Empty<byte>());
+
+        // Check for base64 encoding
+        if (element.TryGetProperty("encoding", out var encodingElem) &&
+            encodingElem.GetString() == "base64")
+        {
+            try
+            {
+                var bytes = Convert.FromBase64String(dataStr);
+                return new BytesValue(name, bytes);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // Otherwise treat as UTF-8 string
+        var utf8Bytes = Encoding.UTF8.GetBytes(dataStr);
+        return new BytesValue(name, utf8Bytes);
     }
 
     /// <summary>
