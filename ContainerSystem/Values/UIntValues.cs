@@ -35,23 +35,37 @@ public class UIntValue : Value
 }
 
 /// <summary>
-/// Unsigned long integer value (64-bit unsigned).
-/// Equivalent to C++ unsigned long type.
+/// Unsigned long integer value (type 7) - 32-bit unsigned range.
+/// Policy: Enforces 32-bit range [0, 2^32-1].
+/// Values exceeding this range should use ULLongValue.
+/// Always serializes as 4 bytes (uint32) regardless of platform.
 /// </summary>
 public class ULongValue : Value
 {
-    private ulong _value;
+    // 32-bit unsigned range constant
+    private const uint UINT32_MAX = uint.MaxValue;  // 4294967295
+
+    private uint _value;
 
     public ULongValue(string name, ulong value) : base(name, ValueTypes.ULongValue)
     {
-        _value = value;
+        // Enforce strict 32-bit range policy
+        if (value > UINT32_MAX)
+        {
+            throw new OverflowException(
+                $"ULongValue: value {value} exceeds 32-bit range " +
+                $"[0, {UINT32_MAX}]. " +
+                "Use ULLongValue for 64-bit values."
+            );
+        }
+        _value = (uint)value;
     }
 
     public override string Data() => _value.ToString();
-    public override int Size() => sizeof(ulong);
+    public override int Size() => sizeof(uint);  // Always 4 bytes
     public override byte[] Serialize() => BitConverter.GetBytes(_value);
     public override int ToInt() => (int)_value;
-    public override long ToLong() => (long)_value;
+    public override long ToLong() => _value;
     public override float ToFloat() => _value;
     public override double ToDouble() => _value;
     public override string ToString() => _value.ToString();

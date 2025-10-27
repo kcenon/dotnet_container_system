@@ -35,21 +35,37 @@ public class IntValue : Value
 }
 
 /// <summary>
-/// Long integer value (64-bit signed).
+/// Long integer value (type 6) - 32-bit signed range.
+/// Policy: Enforces 32-bit range [-2^31, 2^31-1].
+/// Values exceeding this range should use LLongValue.
+/// Always serializes as 4 bytes (int32) regardless of platform.
 /// </summary>
 public class LongValue : Value
 {
-    private long _value;
+    // 32-bit signed range constants
+    private const int INT32_MIN = int.MinValue;  // -2147483648
+    private const int INT32_MAX = int.MaxValue;   // 2147483647
+
+    private int _value;
 
     public LongValue(string name, long value) : base(name, ValueTypes.LongValue)
     {
-        _value = value;
+        // Enforce strict 32-bit range policy
+        if (value < INT32_MIN || value > INT32_MAX)
+        {
+            throw new OverflowException(
+                $"LongValue: value {value} exceeds 32-bit range " +
+                $"[{INT32_MIN}, {INT32_MAX}]. " +
+                "Use LLongValue for 64-bit values."
+            );
+        }
+        _value = (int)value;
     }
 
     public override string Data() => _value.ToString();
-    public override int Size() => sizeof(long);
+    public override int Size() => sizeof(int);  // Always 4 bytes
     public override byte[] Serialize() => BitConverter.GetBytes(_value);
-    public override int ToInt() => (int)_value;
+    public override int ToInt() => _value;
     public override long ToLong() => _value;
     public override float ToFloat() => _value;
     public override double ToDouble() => _value;
