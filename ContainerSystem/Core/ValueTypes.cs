@@ -81,7 +81,10 @@ public enum ValueTypes
     StringValue = 13,
 
     /// <summary>Nested container (composite value)</summary>
-    ContainerValue = 14
+    ContainerValue = 14,
+
+    /// <summary>Array/list of values</summary>
+    ArrayValue = 15
 }
 
 /// <summary>
@@ -105,7 +108,8 @@ public static class ValueTypesExtensions
         { "11", ValueTypes.DoubleValue },
         { "12", ValueTypes.BytesValue },
         { "13", ValueTypes.StringValue },
-        { "14", ValueTypes.ContainerValue }
+        { "14", ValueTypes.ContainerValue },
+        { "15", ValueTypes.ArrayValue }
     };
 
     private static readonly Dictionary<ValueTypes, string> TypeToStringMap = new()
@@ -124,7 +128,8 @@ public static class ValueTypesExtensions
         { ValueTypes.DoubleValue, "11" },
         { ValueTypes.BytesValue, "12" },
         { ValueTypes.StringValue, "13" },
-        { ValueTypes.ContainerValue, "14" }
+        { ValueTypes.ContainerValue, "14" },
+        { ValueTypes.ArrayValue, "15" }
     };
 
     /// <summary>
