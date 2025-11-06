@@ -13,7 +13,7 @@ namespace ContainerSystem.Core;
 /// Base class for all values stored in the container system.
 /// Equivalent to C++ value class.
 /// </summary>
-public abstract class Value
+public abstract class Value : IValue
 {
     private string _name;
     private ValueTypes _type;

@@ -160,11 +160,12 @@ public class ArrayValue : Value
         // Write element count
         writer.Write(_elements.Count);
 
-        // Write all element data
+        // Write all elements with full wire format (type, name, size, value)
         foreach (var element in _elements)
         {
-            var data = element.Serialize();
-            writer.Write(data);
+            // Serialize element with header for proper deserialization
+            var elementData = ValueFactory.SerializeWithHeader(element);
+            writer.Write(elementData);
         }
 
         return ms.ToArray();
@@ -184,14 +185,13 @@ public class ArrayValue : Value
         // Read count
         int count = reader.ReadInt32();
 
-        var elements = new List<Value>();
+        var elements = new List<Value>(count);
 
-        // Deserialize all elements
+        // Deserialize all elements using ValueFactory
         for (int i = 0; i < count; i++)
         {
-            // TODO: Implement value factory deserialization
-            // For now, return empty array
-            break;
+            var element = ValueFactory.DeserializeFromReader(reader);
+            elements.Add(element);
         }
 
         return new ArrayValue(name, elements);

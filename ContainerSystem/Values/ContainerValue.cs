@@ -98,10 +98,10 @@ public class ContainerValue : Value
         // Write child count
         writer.Write(ChildCount);
 
-        // Write each child's serialized data
+        // Write each child with full wire format
         foreach (var child in Children())
         {
-            var childData = child.Serialize();
+            var childData = ValueFactory.SerializeWithHeader(child);
             writer.Write(childData.Length);
             writer.Write(childData);
         }
