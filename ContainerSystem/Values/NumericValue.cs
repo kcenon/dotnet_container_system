@@ -13,8 +13,9 @@ namespace ContainerSystem.Values;
 
 /// <summary>
 /// Integer value (32-bit signed).
+/// Supports zero-copy serialization via Span&lt;T&gt;.
 /// </summary>
-public class IntValue : Value
+public class IntValue : Value, IValueSpan
 {
     private int _value;
 
@@ -32,6 +33,27 @@ public class IntValue : Value
     public override double ToDouble() => _value;
     public override string ToString() => _value.ToString();
     public override bool ToBoolean() => _value != 0;
+
+    // IValueSpan implementation for zero-copy serialization
+    public bool TrySerialize(Span<byte> destination, out int bytesWritten)
+    {
+        if (destination.Length < sizeof(int))
+        {
+            bytesWritten = 0;
+            return false;
+        }
+
+        BitConverter.TryWriteBytes(destination, _value);
+        bytesWritten = sizeof(int);
+        return true;
+    }
+
+    public ReadOnlySpan<byte> AsSpan()
+    {
+        Span<byte> buffer = stackalloc byte[sizeof(int)];
+        BitConverter.TryWriteBytes(buffer, _value);
+        return buffer;
+    }
 }
 
 /// <summary>
@@ -39,8 +61,9 @@ public class IntValue : Value
 /// Policy: Enforces 32-bit range [-2^31, 2^31-1].
 /// Values exceeding this range should use LLongValue.
 /// Always serializes as 4 bytes (int32) regardless of platform.
+/// Supports zero-copy serialization via Span&lt;T&gt;.
 /// </summary>
-public class LongValue : Value
+public class LongValue : Value, IValueSpan
 {
     // 32-bit signed range constants
     private const int INT32_MIN = int.MinValue;  // -2147483648
@@ -71,12 +94,34 @@ public class LongValue : Value
     public override double ToDouble() => _value;
     public override string ToString() => _value.ToString();
     public override bool ToBoolean() => _value != 0;
+
+    // IValueSpan implementation for zero-copy serialization
+    public bool TrySerialize(Span<byte> destination, out int bytesWritten)
+    {
+        if (destination.Length < sizeof(int))
+        {
+            bytesWritten = 0;
+            return false;
+        }
+
+        BitConverter.TryWriteBytes(destination, _value);
+        bytesWritten = sizeof(int);
+        return true;
+    }
+
+    public ReadOnlySpan<byte> AsSpan()
+    {
+        Span<byte> buffer = stackalloc byte[sizeof(int)];
+        BitConverter.TryWriteBytes(buffer, _value);
+        return buffer;
+    }
 }
 
 /// <summary>
 /// Double precision floating point value (64-bit).
+/// Supports zero-copy serialization via Span&lt;T&gt;.
 /// </summary>
-public class DoubleValue : Value
+public class DoubleValue : Value, IValueSpan
 {
     private double _value;
 
@@ -94,12 +139,34 @@ public class DoubleValue : Value
     public override double ToDouble() => _value;
     public override string ToString() => _value.ToString(CultureInfo.InvariantCulture);
     public override bool ToBoolean() => Math.Abs(_value) > 0.0;
+
+    // IValueSpan implementation for zero-copy serialization
+    public bool TrySerialize(Span<byte> destination, out int bytesWritten)
+    {
+        if (destination.Length < sizeof(double))
+        {
+            bytesWritten = 0;
+            return false;
+        }
+
+        BitConverter.TryWriteBytes(destination, _value);
+        bytesWritten = sizeof(double);
+        return true;
+    }
+
+    public ReadOnlySpan<byte> AsSpan()
+    {
+        Span<byte> buffer = stackalloc byte[sizeof(double)];
+        BitConverter.TryWriteBytes(buffer, _value);
+        return buffer;
+    }
 }
 
 /// <summary>
 /// Float value (32-bit).
+/// Supports zero-copy serialization via Span&lt;T&gt;.
 /// </summary>
-public class FloatValue : Value
+public class FloatValue : Value, IValueSpan
 {
     private float _value;
 
@@ -117,6 +184,27 @@ public class FloatValue : Value
     public override double ToDouble() => _value;
     public override string ToString() => _value.ToString(CultureInfo.InvariantCulture);
     public override bool ToBoolean() => Math.Abs(_value) > 0.0f;
+
+    // IValueSpan implementation for zero-copy serialization
+    public bool TrySerialize(Span<byte> destination, out int bytesWritten)
+    {
+        if (destination.Length < sizeof(float))
+        {
+            bytesWritten = 0;
+            return false;
+        }
+
+        BitConverter.TryWriteBytes(destination, _value);
+        bytesWritten = sizeof(float);
+        return true;
+    }
+
+    public ReadOnlySpan<byte> AsSpan()
+    {
+        Span<byte> buffer = stackalloc byte[sizeof(float)];
+        BitConverter.TryWriteBytes(buffer, _value);
+        return buffer;
+    }
 }
 
 /// <summary>
