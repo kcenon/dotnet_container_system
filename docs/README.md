@@ -63,6 +63,7 @@ Welcome to the dotnet_container_system documentation! A type-safe, high-performa
 |----------|-------------|
 | [CHANGELOG.md](CHANGELOG.md) | Version history and changes |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
+| [TESTING.md](guides/TESTING.md) | Testing guide and best practices |
 
 ---
 
