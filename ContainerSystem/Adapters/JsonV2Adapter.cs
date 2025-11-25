@@ -61,6 +61,7 @@ public static class JsonV2Adapter
     private const string V1_FORMAT_VERSION = "1.0";
 
     // Type name mapping for human-readable type names
+    // Note: Order matches C++ value_types enum (string=12, bytes=13)
     private static readonly Dictionary<ValueTypes, string> TypeNameMap = new()
     {
         { ValueTypes.NullValue, "null" },
@@ -75,9 +76,10 @@ public static class JsonV2Adapter
         { ValueTypes.ULLongValue, "ullong" },
         { ValueTypes.FloatValue, "float" },
         { ValueTypes.DoubleValue, "double" },
-        { ValueTypes.BytesValue, "bytes" },
-        { ValueTypes.StringValue, "string" },
-        { ValueTypes.ContainerValue, "container" }
+        { ValueTypes.StringValue, "string" },   // 12 - matches C++ string_value
+        { ValueTypes.BytesValue, "bytes" },     // 13 - matches C++ bytes_value
+        { ValueTypes.ContainerValue, "container" },
+        { ValueTypes.ArrayValue, "array" }
     };
 
     private static readonly Dictionary<string, ValueTypes> ReverseTypeNameMap =
