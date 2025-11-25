@@ -5,6 +5,7 @@ Copyright (c) 2025, kcenon
 All rights reserved.
 ***************************************************************************/
 
+using System.Collections;
 using System.Text;
 using System.Text.Json;
 using ContainerSystem.Values;
@@ -15,8 +16,14 @@ namespace ContainerSystem.Core;
 /// A high-level container for messages, including source/target IDs, message type,
 /// and a list of values.
 /// Equivalent to C++ value_container class.
+///
+/// Features:
+/// - STL-style iteration via IEnumerable&lt;Value&gt;
+/// - Conditional thread safety with ReaderWriterLockSlim
+/// - Memory footprint tracking
+/// - Read/write statistics
 /// </summary>
-public class ValueContainer
+public class ValueContainer : IEnumerable<Value>, IDisposable
 {
     private string _messageType;
     private string _sourceId;
@@ -25,7 +32,17 @@ public class ValueContainer
     private string _targetSubId;
     private string _version;
     private readonly List<Value> _values;
-    private readonly object _lock = new();
+
+    // Thread safety
+    private readonly ReaderWriterLockSlim _rwLock;
+    private volatile bool _threadSafeEnabled;
+
+    // Statistics (C++ compatible)
+    private long _readCount;
+    private long _writeCount;
+    private long _serializationCount;
+
+    private bool _disposed;
 
     /// <summary>
     /// Default constructor: sets up a "data_container" type with version "1.0.0.0".
@@ -39,57 +56,39 @@ public class ValueContainer
         _targetSubId = string.Empty;
         _version = "1.0.0.0";
         _values = new List<Value>();
+        _rwLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
+        _threadSafeEnabled = false;
     }
 
     /// <summary>
     /// Construct from a serialized JSON string.
     /// </summary>
     /// <param name="dataString">Serialized container data</param>
-    public ValueContainer(string dataString)
+    public ValueContainer(string dataString) : this()
     {
-        _values = new List<Value>();
         Deserialize(dataString);
-        _messageType ??= "data_container";
-        _version ??= "1.0.0.0";
-        _sourceId ??= string.Empty;
-        _sourceSubId ??= string.Empty;
-        _targetId ??= string.Empty;
-        _targetSubId ??= string.Empty;
     }
 
     /// <summary>
     /// Construct from a byte array.
     /// </summary>
     /// <param name="dataArray">Byte array containing serialized data</param>
-    public ValueContainer(byte[] dataArray)
+    public ValueContainer(byte[] dataArray) : this()
     {
-        _values = new List<Value>();
         var dataString = Encoding.UTF8.GetString(dataArray);
         Deserialize(dataString);
-        _messageType ??= "data_container";
-        _version ??= "1.0.0.0";
-        _sourceId ??= string.Empty;
-        _sourceSubId ??= string.Empty;
-        _targetId ??= string.Empty;
-        _targetSubId ??= string.Empty;
     }
 
     /// <summary>
     /// Construct with full metadata specification.
     /// </summary>
-    /// <param name="sourceId">Source ID</param>
-    /// <param name="sourceSubId">Source sub ID</param>
-    /// <param name="targetId">Target ID</param>
-    /// <param name="targetSubId">Target sub ID</param>
-    /// <param name="messageType">Message type</param>
-    /// <param name="version">Protocol version</param>
     public ValueContainer(
         string sourceId,
         string sourceSubId,
         string targetId,
         string targetSubId,
         string messageType,
-        string version = "1.0.0.0")
+        string version = "1.0.0.0") : this()
     {
         _sourceId = sourceId;
         _sourceSubId = sourceSubId;
@@ -97,142 +96,345 @@ public class ValueContainer
         _targetSubId = targetSubId;
         _messageType = messageType;
         _version = version;
-        _values = new List<Value>();
     }
+
+    #region Properties
 
     /// <summary>
     /// Gets or sets the message type.
     /// </summary>
     public string MessageType
     {
-        get => _messageType;
-        set => _messageType = value;
+        get => WithReadLock(() => _messageType);
+        set => WithWriteLock(() => _messageType = value);
     }
 
     /// <summary>
     /// Gets the source ID.
     /// </summary>
-    public string SourceId => _sourceId;
+    public string SourceId => WithReadLock(() => _sourceId);
 
     /// <summary>
     /// Gets the source sub ID.
     /// </summary>
-    public string SourceSubId => _sourceSubId;
+    public string SourceSubId => WithReadLock(() => _sourceSubId);
 
     /// <summary>
     /// Gets the target ID.
     /// </summary>
-    public string TargetId => _targetId;
+    public string TargetId => WithReadLock(() => _targetId);
 
     /// <summary>
     /// Gets the target sub ID.
     /// </summary>
-    public string TargetSubId => _targetSubId;
+    public string TargetSubId => WithReadLock(() => _targetSubId);
 
     /// <summary>
     /// Gets the version.
     /// </summary>
-    public string Version => _version;
+    public string Version => WithReadLock(() => _version);
 
     /// <summary>
     /// Gets all units/values in the container (read-only access).
     /// </summary>
-    public IReadOnlyList<Value> Units
+    public IReadOnlyList<Value> Units => WithReadLock(() => _values.AsReadOnly());
+
+    /// <summary>
+    /// Gets the number of values in the container.
+    /// Equivalent to C++ value_container::size().
+    /// </summary>
+    public int Count => WithReadLock(() => _values.Count);
+
+    /// <summary>
+    /// Returns whether container is empty.
+    /// Equivalent to C++ value_container::empty().
+    /// </summary>
+    public bool Empty => Count == 0;
+
+    #endregion
+
+    #region Thread Safety Control
+
+    /// <summary>
+    /// Enables thread-safe mode.
+    /// Equivalent to C++ conditional thread safety.
+    /// </summary>
+    public void EnableThreadSafety()
     {
-        get
-        {
-            lock (_lock)
-            {
-                return _values.AsReadOnly();
-            }
-        }
+        _threadSafeEnabled = true;
     }
+
+    /// <summary>
+    /// Disables thread-safe mode for better single-threaded performance.
+    /// </summary>
+    public void DisableThreadSafety()
+    {
+        _threadSafeEnabled = false;
+    }
+
+    /// <summary>
+    /// Gets whether thread-safe mode is enabled.
+    /// </summary>
+    public bool IsThreadSafe => _threadSafeEnabled;
+
+    #endregion
+
+    #region Statistics (C++ compatible)
+
+    /// <summary>
+    /// Gets the read operation count.
+    /// Equivalent to C++ statistics tracking.
+    /// </summary>
+    public long ReadCount => Interlocked.Read(ref _readCount);
+
+    /// <summary>
+    /// Gets the write operation count.
+    /// </summary>
+    public long WriteCount => Interlocked.Read(ref _writeCount);
+
+    /// <summary>
+    /// Gets the serialization operation count.
+    /// </summary>
+    public long SerializationCount => Interlocked.Read(ref _serializationCount);
+
+    /// <summary>
+    /// Resets all statistics counters.
+    /// </summary>
+    public void ResetStatistics()
+    {
+        Interlocked.Exchange(ref _readCount, 0);
+        Interlocked.Exchange(ref _writeCount, 0);
+        Interlocked.Exchange(ref _serializationCount, 0);
+    }
+
+    /// <summary>
+    /// Gets memory statistics.
+    /// Equivalent to C++ value_container::memory_stats().
+    /// </summary>
+    /// <returns>Tuple of (heapAllocations, stackAllocations) - in .NET all are heap</returns>
+    public (long heapAllocations, long stackAllocations) MemoryStats()
+    {
+        // In .NET, all objects are heap allocated
+        return (WriteCount, 0);
+    }
+
+    /// <summary>
+    /// Estimates total memory footprint in bytes.
+    /// Equivalent to C++ value_container::memory_footprint().
+    /// </summary>
+    public long MemoryFootprint()
+    {
+        return WithReadLock(() =>
+        {
+            long total = 0;
+
+            // Estimate string sizes
+            total += Encoding.UTF8.GetByteCount(_messageType);
+            total += Encoding.UTF8.GetByteCount(_sourceId);
+            total += Encoding.UTF8.GetByteCount(_sourceSubId);
+            total += Encoding.UTF8.GetByteCount(_targetId);
+            total += Encoding.UTF8.GetByteCount(_targetSubId);
+            total += Encoding.UTF8.GetByteCount(_version);
+
+            // Estimate value sizes
+            foreach (var value in _values)
+            {
+                total += value.Size();
+                total += Encoding.UTF8.GetByteCount(value.Name);
+            }
+
+            return total;
+        });
+    }
+
+    #endregion
+
+    #region Source/Target Management
 
     /// <summary>
     /// Sets the source IDs.
     /// </summary>
-    /// <param name="sourceId">Main source ID</param>
-    /// <param name="sourceSubId">Source sub ID</param>
     public void SetSource(string sourceId, string sourceSubId = "")
     {
-        _sourceId = sourceId;
-        _sourceSubId = sourceSubId;
+        WithWriteLock(() =>
+        {
+            _sourceId = sourceId;
+            _sourceSubId = sourceSubId;
+        });
     }
 
     /// <summary>
     /// Sets the target IDs.
     /// </summary>
-    /// <param name="targetId">Main target ID</param>
-    /// <param name="targetSubId">Target sub ID</param>
     public void SetTarget(string targetId, string targetSubId = "")
     {
-        _targetId = targetId;
-        _targetSubId = targetSubId;
+        WithWriteLock(() =>
+        {
+            _targetId = targetId;
+            _targetSubId = targetSubId;
+        });
     }
+
+    /// <summary>
+    /// Swaps source and target IDs.
+    /// Equivalent to C++ value_container::swap_header().
+    /// </summary>
+    public void SwapHeader()
+    {
+        WithWriteLock(() =>
+        {
+            (_sourceId, _targetId) = (_targetId, _sourceId);
+            (_sourceSubId, _targetSubId) = (_targetSubId, _sourceSubId);
+        });
+    }
+
+    #endregion
+
+    #region Value Management
 
     /// <summary>
     /// Adds a value to the container.
     /// </summary>
-    /// <param name="value">Value to add</param>
     public void Add(Value value)
     {
-        lock (_lock)
+        WithWriteLock(() => _values.Add(value));
+    }
+
+    /// <summary>
+    /// Sets a value by key, updating if exists or adding if new.
+    /// Equivalent to C++ value_container::set_value().
+    /// </summary>
+    public void SetValue(string key, Value value)
+    {
+        WithWriteLock(() =>
         {
-            _values.Add(value);
-        }
+            value.Name = key;
+            var index = _values.FindIndex(v => v.Name == key);
+            if (index >= 0)
+            {
+                _values[index] = value;
+            }
+            else
+            {
+                _values.Add(value);
+            }
+        });
     }
 
     /// <summary>
     /// Gets a single value by name.
+    /// Equivalent to C++ value_container::get_value().
     /// </summary>
-    /// <param name="key">Name of the value to find</param>
-    /// <returns>The value if found, null otherwise</returns>
     public Value? GetValue(string key)
     {
-        lock (_lock)
-        {
-            return _values.FirstOrDefault(v => v.Name == key);
-        }
+        return WithReadLock(() => _values.FirstOrDefault(v => v.Name == key));
     }
 
     /// <summary>
     /// Gets all values with the specified name.
+    /// Equivalent to C++ value_container for multiple values.
     /// </summary>
-    /// <param name="key">Name to search for</param>
-    /// <returns>List of matching values</returns>
     public List<Value> ValueArray(string key)
     {
-        lock (_lock)
-        {
-            return _values.Where(v => v.Name == key).ToList();
-        }
+        return WithReadLock(() => _values.Where(v => v.Name == key).ToList());
     }
 
     /// <summary>
     /// Gets all values in the container.
     /// </summary>
-    /// <returns>List of all values</returns>
     public List<Value> Values()
     {
-        lock (_lock)
-        {
-            return new List<Value>(_values);
-        }
+        return WithReadLock(() => new List<Value>(_values));
     }
+
+    /// <summary>
+    /// Removes a value by name.
+    /// Equivalent to C++ value_container::remove().
+    /// </summary>
+    public bool Remove(string targetName)
+    {
+        return WithWriteLock(() =>
+        {
+            var index = _values.FindIndex(v => v.Name == targetName);
+            if (index >= 0)
+            {
+                _values.RemoveAt(index);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    /// <summary>
+    /// Clears all stored child values.
+    /// Equivalent to C++ value_container::clear_value().
+    /// </summary>
+    public void ClearValue()
+    {
+        WithWriteLock(() => _values.Clear());
+    }
+
+    /// <summary>
+    /// Reinitializes the container to defaults.
+    /// Equivalent to C++ value_container::initialize().
+    /// </summary>
+    public void Initialize()
+    {
+        WithWriteLock(() =>
+        {
+            _messageType = "data_container";
+            _sourceId = string.Empty;
+            _sourceSubId = string.Empty;
+            _targetId = string.Empty;
+            _targetSubId = string.Empty;
+            _version = "1.0.0.0";
+            _values.Clear();
+        });
+    }
+
+    /// <summary>
+    /// Creates a copy of this container.
+    /// Equivalent to C++ value_container::copy().
+    /// </summary>
+    /// <param name="containingValues">If false, only copy header</param>
+    public ValueContainer Copy(bool containingValues = true)
+    {
+        return WithReadLock(() =>
+        {
+            var copy = new ValueContainer(
+                _sourceId, _sourceSubId,
+                _targetId, _targetSubId,
+                _messageType, _version);
+
+            if (containingValues)
+            {
+                foreach (var value in _values)
+                {
+                    copy.Add(value);
+                }
+            }
+
+            return copy;
+        });
+    }
+
+    #endregion
+
+    #region Serialization
 
     /// <summary>
     /// Serializes the container to a JSON string.
     /// </summary>
-    /// <returns>JSON string representation</returns>
     public string Serialize() => ToJson();
 
     /// <summary>
-    /// Converts the container to JSON format (flat Python/.NET format).
+    /// Converts the container to JSON format.
     /// </summary>
-    /// <returns>JSON string representation</returns>
     public string ToJson()
     {
-        lock (_lock)
+        Interlocked.Increment(ref _serializationCount);
+
+        return WithReadLock(() =>
         {
             var sb = new StringBuilder();
             sb.Append('{');
@@ -252,60 +454,79 @@ public class ValueContainer
 
             sb.Append("]}");
             return sb.ToString();
-        }
+        });
+    }
+
+    /// <summary>
+    /// Serializes to byte array.
+    /// Equivalent to C++ value_container::serialize_array().
+    /// </summary>
+    public byte[] SerializeArray()
+    {
+        return Encoding.UTF8.GetBytes(Serialize());
     }
 
     /// <summary>
     /// Deserializes JSON string into this container.
+    /// Equivalent to C++ value_container::deserialize().
     /// </summary>
-    /// <param name="dataString">JSON string to deserialize</param>
-    private void Deserialize(string dataString)
+    public bool Deserialize(string dataString)
     {
         try
         {
             using var doc = JsonDocument.Parse(dataString);
             var root = doc.RootElement;
 
-            if (root.TryGetProperty("message_type", out var msgType))
-                _messageType = msgType.GetString() ?? "data_container";
-
-            if (root.TryGetProperty("version", out var ver))
-                _version = ver.GetString() ?? "1.0.0.0";
-
-            if (root.TryGetProperty("source_id", out var srcId))
-                _sourceId = srcId.GetString() ?? string.Empty;
-
-            if (root.TryGetProperty("source_sub_id", out var srcSubId))
-                _sourceSubId = srcSubId.GetString() ?? string.Empty;
-
-            if (root.TryGetProperty("target_id", out var tgtId))
-                _targetId = tgtId.GetString() ?? string.Empty;
-
-            if (root.TryGetProperty("target_sub_id", out var tgtSubId))
-                _targetSubId = tgtSubId.GetString() ?? string.Empty;
-
-            // Parse values array
-            if (root.TryGetProperty("values", out var valuesArray) && valuesArray.ValueKind == JsonValueKind.Array)
+            WithWriteLock(() =>
             {
-                foreach (var valueElement in valuesArray.EnumerateArray())
+                if (root.TryGetProperty("message_type", out var msgType))
+                    _messageType = msgType.GetString() ?? "data_container";
+
+                if (root.TryGetProperty("version", out var ver))
+                    _version = ver.GetString() ?? "1.0.0.0";
+
+                if (root.TryGetProperty("source_id", out var srcId))
+                    _sourceId = srcId.GetString() ?? string.Empty;
+
+                if (root.TryGetProperty("source_sub_id", out var srcSubId))
+                    _sourceSubId = srcSubId.GetString() ?? string.Empty;
+
+                if (root.TryGetProperty("target_id", out var tgtId))
+                    _targetId = tgtId.GetString() ?? string.Empty;
+
+                if (root.TryGetProperty("target_sub_id", out var tgtSubId))
+                    _targetSubId = tgtSubId.GetString() ?? string.Empty;
+
+                // Parse values array
+                if (root.TryGetProperty("values", out var valuesArray) &&
+                    valuesArray.ValueKind == JsonValueKind.Array)
                 {
-                    var value = ParseValueFromJson(valueElement);
-                    if (value != null)
-                        _values.Add(value);
+                    _values.Clear();
+                    foreach (var valueElement in valuesArray.EnumerateArray())
+                    {
+                        var value = ParseValueFromJson(valueElement);
+                        if (value != null)
+                            _values.Add(value);
+                    }
                 }
-            }
+            });
+
+            return true;
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            throw new InvalidOperationException($"Failed to deserialize container: {ex.Message}", ex);
+            return false;
         }
     }
 
     /// <summary>
-    /// Parses a single value from a JSON element.
+    /// Deserializes from byte array.
     /// </summary>
-    /// <param name="element">JSON element containing value data</param>
-    /// <returns>Parsed Value object or null if invalid</returns>
+    public bool Deserialize(byte[] dataArray)
+    {
+        return Deserialize(Encoding.UTF8.GetString(dataArray));
+    }
+
     private static Value? ParseValueFromJson(JsonElement element)
     {
         if (!element.TryGetProperty("name", out var nameElem))
@@ -323,7 +544,8 @@ public class ValueContainer
         if (valueType == ValueTypes.ContainerValue)
         {
             var container = new ContainerValue(name);
-            if (element.TryGetProperty("children", out var childrenArray) && childrenArray.ValueKind == JsonValueKind.Array)
+            if (element.TryGetProperty("children", out var childrenArray) &&
+                childrenArray.ValueKind == JsonValueKind.Array)
             {
                 foreach (var childElement in childrenArray.EnumerateArray())
                 {
@@ -366,12 +588,6 @@ public class ValueContainer
         }
     }
 
-    /// <summary>
-    /// Parses a BytesValue with base64 decoding support.
-    /// </summary>
-    /// <param name="name">Value name</param>
-    /// <param name="element">JSON element</param>
-    /// <returns>BytesValue or null</returns>
     private static BytesValue? ParseBytesValue(string name, JsonElement element)
     {
         if (!element.TryGetProperty("data", out var dataElem))
@@ -404,10 +620,11 @@ public class ValueContainer
     /// <summary>
     /// Converts the container to XML format.
     /// </summary>
-    /// <returns>XML string representation</returns>
     public string ToXml()
     {
-        lock (_lock)
+        Interlocked.Increment(ref _serializationCount);
+
+        return WithReadLock(() =>
         {
             var sb = new StringBuilder();
             sb.Append("<container ");
@@ -425,20 +642,139 @@ public class ValueContainer
 
             sb.Append("</container>");
             return sb.ToString();
+        });
+    }
+
+    #endregion
+
+    #region IEnumerable<Value> Implementation
+
+    /// <summary>
+    /// Returns an enumerator for iterating over values.
+    /// Enables range-based for loops like C++ iterators.
+    /// </summary>
+    public IEnumerator<Value> GetEnumerator()
+    {
+        // Take a snapshot for thread-safe iteration
+        List<Value> snapshot;
+        if (_threadSafeEnabled)
+        {
+            _rwLock.EnterReadLock();
+            try
+            {
+                snapshot = new List<Value>(_values);
+            }
+            finally
+            {
+                _rwLock.ExitReadLock();
+            }
+        }
+        else
+        {
+            snapshot = new List<Value>(_values);
+        }
+
+        return snapshot.GetEnumerator();
+    }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    #endregion
+
+    #region Lock Helpers
+
+    private T WithReadLock<T>(Func<T> action)
+    {
+        if (_threadSafeEnabled)
+        {
+            _rwLock.EnterReadLock();
+            try
+            {
+                Interlocked.Increment(ref _readCount);
+                return action();
+            }
+            finally
+            {
+                _rwLock.ExitReadLock();
+            }
+        }
+        else
+        {
+            Interlocked.Increment(ref _readCount);
+            return action();
         }
     }
 
-    /// <summary>
-    /// Gets the number of values in the container.
-    /// </summary>
-    public int Count
+    private void WithWriteLock(Action action)
     {
-        get
+        if (_threadSafeEnabled)
         {
-            lock (_lock)
+            _rwLock.EnterWriteLock();
+            try
             {
-                return _values.Count;
+                Interlocked.Increment(ref _writeCount);
+                action();
+            }
+            finally
+            {
+                _rwLock.ExitWriteLock();
             }
         }
+        else
+        {
+            Interlocked.Increment(ref _writeCount);
+            action();
+        }
     }
+
+    private T WithWriteLock<T>(Func<T> action)
+    {
+        if (_threadSafeEnabled)
+        {
+            _rwLock.EnterWriteLock();
+            try
+            {
+                Interlocked.Increment(ref _writeCount);
+                return action();
+            }
+            finally
+            {
+                _rwLock.ExitWriteLock();
+            }
+        }
+        else
+        {
+            Interlocked.Increment(ref _writeCount);
+            return action();
+        }
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                _rwLock.Dispose();
+            }
+            _disposed = true;
+        }
+    }
+
+    ~ValueContainer()
+    {
+        Dispose(false);
+    }
+
+    #endregion
 }
