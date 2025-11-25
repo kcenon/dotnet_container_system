@@ -74,11 +74,11 @@ public enum ValueTypes
     /// <summary>Double precision floating point (64-bit)</summary>
     DoubleValue = 11,
 
-    /// <summary>Binary data (byte array)</summary>
-    BytesValue = 12,
+    /// <summary>String data (UTF-8) - matches C++ std::string position in value_variant</summary>
+    StringValue = 12,
 
-    /// <summary>String data (UTF-8)</summary>
-    StringValue = 13,
+    /// <summary>Binary data (byte array) - matches C++ std::vector&lt;uint8_t&gt; position in value_variant</summary>
+    BytesValue = 13,
 
     /// <summary>Nested container (composite value)</summary>
     ContainerValue = 14,
@@ -106,8 +106,8 @@ public static class ValueTypesExtensions
         { "9", ValueTypes.ULLongValue },
         { "10", ValueTypes.FloatValue },
         { "11", ValueTypes.DoubleValue },
-        { "12", ValueTypes.BytesValue },
-        { "13", ValueTypes.StringValue },
+        { "12", ValueTypes.StringValue },  // Matches C++ string_value position
+        { "13", ValueTypes.BytesValue },   // Matches C++ bytes_value position
         { "14", ValueTypes.ContainerValue },
         { "15", ValueTypes.ArrayValue }
     };
@@ -126,8 +126,8 @@ public static class ValueTypesExtensions
         { ValueTypes.ULLongValue, "9" },
         { ValueTypes.FloatValue, "10" },
         { ValueTypes.DoubleValue, "11" },
-        { ValueTypes.BytesValue, "12" },
-        { ValueTypes.StringValue, "13" },
+        { ValueTypes.StringValue, "12" },  // Matches C++ string_value position
+        { ValueTypes.BytesValue, "13" },   // Matches C++ bytes_value position
         { ValueTypes.ContainerValue, "14" },
         { ValueTypes.ArrayValue, "15" }
     };
