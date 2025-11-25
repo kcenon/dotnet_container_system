@@ -53,7 +53,7 @@ public abstract class Value
     /// <summary>
     /// Gets the type of this value.
     /// </summary>
-    public ValueTypes Type => _type;
+    public virtual ValueTypes Type => _type;
 
     /// <summary>
     /// Gets the parent value (if nested).
@@ -204,7 +204,7 @@ public abstract class Value
         return 0.0;
     }
 
-    public virtual string ToString()
+    public override string ToString()
     {
         ThrowIfNull();
         return string.Empty;

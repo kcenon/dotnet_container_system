@@ -134,7 +134,7 @@ public static class ValueTypesExtensions
 
     /// <summary>
     /// Convert ValueTypes enum to string representation.
-    /// Equivalent to C++ convert_value_type(const value_types&).
+    /// Equivalent to C++ convert_value_type(const value_types).
     /// </summary>
     /// <param name="type">The value type to convert</param>
     /// <returns>String representation (e.g., "4" for IntValue)</returns>
@@ -145,7 +145,7 @@ public static class ValueTypesExtensions
 
     /// <summary>
     /// Convert string representation to ValueTypes enum.
-    /// Equivalent to C++ convert_value_type(const std::string&).
+    /// Equivalent to C++ convert_value_type(const std::string).
     /// </summary>
     /// <param name="typeString">String representation (e.g., "4")</param>
     /// <returns>Corresponding ValueTypes enum</returns>

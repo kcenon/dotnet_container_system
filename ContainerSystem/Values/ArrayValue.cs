@@ -216,7 +216,7 @@ public class ArrayValue : Value
     /// <summary>
     /// Convert to JSON format.
     /// </summary>
-    public string ToJson()
+    public override string ToJson()
     {
         var jsonElements = _elements.Select(e =>
         {
