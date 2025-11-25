@@ -55,8 +55,8 @@ public class SerializationBenchmarks
         // Pre-serialize for deserialization benchmarks
         _smallJson = _smallContainer.Serialize();
         _mediumJson = _mediumContainer.Serialize();
-        _smallBinary = _smallContainer.Store.Serialize();
-        _mediumBinary = _mediumContainer.Store.Serialize();
+        _smallBinary = _smallContainer.SerializeArray();
+        _mediumBinary = _mediumContainer.SerializeArray();
     }
 
     // JSON Serialization
@@ -76,32 +76,24 @@ public class SerializationBenchmarks
     [Benchmark]
     public ValueContainer JsonDeserialize_Medium() => new ValueContainer(_mediumJson);
 
-    // Binary Serialization
+    // Binary Serialization (byte array)
     [Benchmark]
-    public byte[] BinarySerialize_Small() => _smallContainer.Store.Serialize();
+    public byte[] BinarySerialize_Small() => _smallContainer.SerializeArray();
 
     [Benchmark]
-    public byte[] BinarySerialize_Medium() => _mediumContainer.Store.Serialize();
+    public byte[] BinarySerialize_Medium() => _mediumContainer.SerializeArray();
 
-    // Binary Deserialization
+    // Binary Deserialization (from byte array)
     [Benchmark]
-    public void BinaryDeserialize_Small()
-    {
-        var store = new ValueStore();
-        store.Deserialize(_smallBinary);
-    }
+    public ValueContainer BinaryDeserialize_Small() => new ValueContainer(_smallBinary);
 
     [Benchmark]
-    public void BinaryDeserialize_Medium()
-    {
-        var store = new ValueStore();
-        store.Deserialize(_mediumBinary);
-    }
+    public ValueContainer BinaryDeserialize_Medium() => new ValueContainer(_mediumBinary);
 
     // JSON v2.0 Adapter
     [Benchmark]
-    public string JsonV2Serialize_Small() => JsonV2Adapter.ToJson(_smallContainer);
+    public string JsonV2Serialize_Small() => JsonV2Adapter.ToV2Json(_smallContainer);
 
     [Benchmark]
-    public string JsonV2Serialize_Medium() => JsonV2Adapter.ToJson(_mediumContainer);
+    public string JsonV2Serialize_Medium() => JsonV2Adapter.ToV2Json(_mediumContainer);
 }

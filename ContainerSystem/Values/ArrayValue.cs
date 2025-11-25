@@ -186,13 +186,9 @@ public class ArrayValue : Value
 
         var elements = new List<Value>();
 
-        // Deserialize all elements
-        for (int i = 0; i < count; i++)
-        {
-            // TODO: Implement value factory deserialization
-            // For now, return empty array
-            break;
-        }
+        // TODO: Implement value factory deserialization
+        // For now, return empty array (count is read but not used until implemented)
+        _ = count;
 
         return new ArrayValue(name, elements);
     }
