@@ -186,11 +186,118 @@ public class ArrayValue : Value
 
         var elements = new List<Value>();
 
-        // TODO: Implement value factory deserialization
-        // For now, return empty array (count is read but not used until implemented)
-        _ = count;
+        for (int i = 0; i < count; i++)
+        {
+            // Read element type
+            if (ms.Position >= ms.Length) break;
+            var elemType = (ValueTypes)reader.ReadByte();
+
+            // Read element name length
+            if (ms.Position + 4 > ms.Length) break;
+            int elemNameLen = reader.ReadInt32();
+
+            // Read element name
+            if (ms.Position + elemNameLen > ms.Length) break;
+            var elemNameBytes = reader.ReadBytes(elemNameLen);
+            var elemName = Encoding.UTF8.GetString(elemNameBytes);
+
+            // Read element data length
+            if (ms.Position + 4 > ms.Length) break;
+            int elemDataLen = reader.ReadInt32();
+
+            // Read element data
+            if (ms.Position + elemDataLen > ms.Length) break;
+            var elemData = reader.ReadBytes(elemDataLen);
+
+            // Create element using factory
+            var value = CreateValueFromBinary(elemName, elemType, elemData);
+            if (value != null)
+            {
+                elements.Add(value);
+            }
+        }
 
         return new ArrayValue(name, elements);
+    }
+
+    /// <summary>
+    /// Factory method to create a Value from binary data.
+    /// </summary>
+    private static Value? CreateValueFromBinary(string name, ValueTypes valueType, byte[] data)
+    {
+        try
+        {
+            return valueType switch
+            {
+                ValueTypes.BoolValue when data.Length >= 1 => new BoolValue(name, BitConverter.ToBoolean(data, 0)),
+                ValueTypes.ShortValue when data.Length >= 2 => new ShortValue(name, BitConverter.ToInt16(data, 0)),
+                ValueTypes.UShortValue when data.Length >= 2 => new UShortValue(name, BitConverter.ToUInt16(data, 0)),
+                ValueTypes.IntValue when data.Length >= 4 => new IntValue(name, BitConverter.ToInt32(data, 0)),
+                ValueTypes.UIntValue when data.Length >= 4 => new UIntValue(name, BitConverter.ToUInt32(data, 0)),
+                ValueTypes.LongValue when data.Length >= 4 => new LongValue(name, BitConverter.ToInt32(data, 0)),
+                ValueTypes.ULongValue when data.Length >= 4 => new ULongValue(name, BitConverter.ToUInt32(data, 0)),
+                ValueTypes.LLongValue when data.Length >= 8 => new LLongValue(name, BitConverter.ToInt64(data, 0)),
+                ValueTypes.ULLongValue when data.Length >= 8 => new ULLongValue(name, BitConverter.ToUInt64(data, 0)),
+                ValueTypes.FloatValue when data.Length >= 4 => new FloatValue(name, BitConverter.ToSingle(data, 0)),
+                ValueTypes.DoubleValue when data.Length >= 8 => new DoubleValue(name, BitConverter.ToDouble(data, 0)),
+                ValueTypes.StringValue => new StringValue(name, Encoding.UTF8.GetString(data)),
+                ValueTypes.BytesValue => new BytesValue(name, data),
+                ValueTypes.ContainerValue => DeserializeContainerValue(name, data),
+                ValueTypes.ArrayValue => Deserialize(name, data),
+                _ => null
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Deserialize a ContainerValue from binary data.
+    /// </summary>
+    private static ContainerValue DeserializeContainerValue(string name, byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read child count
+        int childCount = reader.ReadInt32();
+
+        var container = new ContainerValue(name);
+
+        for (int i = 0; i < childCount; i++)
+        {
+            // Read element type
+            if (ms.Position >= ms.Length) break;
+            var elemType = (ValueTypes)reader.ReadByte();
+
+            // Read element name length
+            if (ms.Position + 4 > ms.Length) break;
+            int elemNameLen = reader.ReadInt32();
+
+            // Read element name
+            if (ms.Position + elemNameLen > ms.Length) break;
+            var elemNameBytes = reader.ReadBytes(elemNameLen);
+            var elemName = Encoding.UTF8.GetString(elemNameBytes);
+
+            // Read element data length
+            if (ms.Position + 4 > ms.Length) break;
+            int elemDataLen = reader.ReadInt32();
+
+            // Read element data
+            if (ms.Position + elemDataLen > ms.Length) break;
+            var elemData = reader.ReadBytes(elemDataLen);
+
+            // Create element using factory
+            var value = CreateValueFromBinary(elemName, elemType, elemData);
+            if (value != null)
+            {
+                container.Add(value);
+            }
+        }
+
+        return container;
     }
 
     public override string ToString()
