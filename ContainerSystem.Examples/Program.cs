@@ -7,9 +7,9 @@ All rights reserved.
 
 namespace ContainerSystem.Examples;
 
-class Program
+internal class Program
 {
-    static void Main(string[] args)
+    private static void Main(string[] args)
     {
         BasicUsage.Run();
     }
