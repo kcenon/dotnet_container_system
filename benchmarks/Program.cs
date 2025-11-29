@@ -5,9 +5,9 @@ using BenchmarkDotNet.Running;
 
 namespace ContainerSystem.Benchmarks;
 
-class Program
+internal class Program
 {
-    static void Main(string[] args)
+    private static void Main(string[] args)
     {
         // Run all benchmarks
         var summary = BenchmarkRunner.Run(typeof(Program).Assembly);
