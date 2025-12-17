@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **WireProtocol**: C++ Wire Protocol serialization support
+  - `WireProtocol.Serialize()` - Serialize container to C++ wire format
+  - `WireProtocol.Deserialize()` - Deserialize from C++ wire format
+  - `WireProtocol.TryDeserialize()` - Safe deserialization without exceptions
+  - Full support for all value types including nested containers
+  - Special character escaping for protocol delimiters
+  - Header field encoding (target, source, message_type, version)
+- Comprehensive unit tests for wire protocol (25+ tests)
+
 ### Planned
 - Memory pooling for high-throughput scenarios
 - Async serialization support

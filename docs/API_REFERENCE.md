@@ -23,7 +23,8 @@ Complete API documentation for .NET Container System with code examples and usag
    - [BytesValue](#bytesvalue)
    - [ContainerValue](#containervalue)
    - [ArrayValue](#arrayvalue)
-3. [Adapters](#adapters)
+3. [Serialization](#serialization)
+   - [WireProtocol](#wireprotocol)
    - [JsonV2Adapter](#jsonv2adapter)
 4. [Enumerations](#enumerations)
    - [ValueTypes](#valuetypes)
@@ -462,7 +463,95 @@ container.Add(scores);
 
 ---
 
-## Adapters
+## Serialization
+
+### WireProtocol
+
+C++ Wire Protocol serialization for cross-language binary compatibility.
+
+```csharp
+namespace ContainerSystem.Core;
+
+public static class WireProtocol
+```
+
+#### Wire Protocol Format
+
+The wire protocol uses a text-based format for C++ interoperability:
+
+```
+@header={{[field_id,value];...}}@data={{[name,type,value];...}};
+```
+
+**Header Field IDs:**
+| ID | Field |
+|----|-------|
+| 1 | target_id |
+| 2 | target_sub_id |
+| 3 | source_id |
+| 4 | source_sub_id |
+| 5 | message_type |
+| 6 | version |
+
+#### Methods
+
+```csharp
+// Serialize to wire protocol string
+public static string Serialize(ValueContainer container)
+
+// Serialize to wire protocol bytes (UTF-8)
+public static byte[] SerializeToBytes(ValueContainer container)
+
+// Deserialize from wire protocol string
+public static ValueContainer Deserialize(string wireData)
+
+// Deserialize from wire protocol bytes
+public static ValueContainer Deserialize(byte[] wireData)
+
+// Try deserialize without exceptions
+public static bool TryDeserialize(string wireData, out ValueContainer? container)
+```
+
+#### Example
+
+```csharp
+using ContainerSystem.Core;
+
+// Create container
+var container = new ValueContainer();
+container.MessageType = "request";
+container.SetSource("client", "app");
+container.SetTarget("server", "handler");
+container.Add(new IntValue("user_id", 12345));
+container.Add(new StringValue("action", "login"));
+
+// Serialize to C++ wire protocol
+string wireData = WireProtocol.Serialize(container);
+// Result: @header={{[1,server];[2,handler];[3,client];[4,app];[5,request];[6,1.0.0.0];}}@data={{[user_id,4,12345];[action,12,login];}};
+
+// Send to C++ system...
+
+// Receive from C++ system
+string cppResponse = "@header={{[1,client];[3,server];[5,response];}}@data={{[status,4,200];[message,12,OK];}};";
+var response = WireProtocol.Deserialize(cppResponse);
+
+// Safe deserialization
+if (WireProtocol.TryDeserialize(cppResponse, out var result))
+{
+    Console.WriteLine($"Status: {result.GetValue("status")?.ToInt()}");
+}
+```
+
+#### C++ Compatibility
+
+The wire protocol ensures binary compatibility with C++ container_system:
+
+- Type IDs match C++ `value_types` enum exactly
+- Special characters are properly escaped
+- Header field order follows C++ convention
+- All numeric types serialize with correct byte sizes
+
+---
 
 ### JsonV2Adapter
 
@@ -702,6 +791,10 @@ string xml = container.ToXml();
 // JSON v2.0 for cross-language
 string jsonV2 = JsonV2Adapter.ToV2Json(container, pretty: true);
 var fromV2 = JsonV2Adapter.FromV2Json(jsonV2);
+
+// C++ Wire Protocol (for direct C++ interop)
+string wireData = WireProtocol.Serialize(container);
+var fromWire = WireProtocol.Deserialize(wireData);
 ```
 
 ### Thread-Safe Operations
