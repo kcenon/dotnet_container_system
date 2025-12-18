@@ -48,6 +48,28 @@ var restored = new ValueContainer(json);
 var username = restored.GetValue("username")?.ToString();
 ```
 
+### Fluent Builder Pattern
+
+```csharp
+using ContainerSystem.Messaging;
+
+// Create container using fluent builder
+var container = new ContainerBuilder()
+    .WithSource("client_app", "session_123")
+    .WithTarget("user_service", "handler")
+    .WithMessageType("user_profile")
+    .WithValue(new StringValue("username", "john_doe"))
+    .WithValue(new IntValue("age", 30))
+    .WithThreadSafety()
+    .Build();
+
+// Or use convenience factory methods
+var request = ContainerBuilder
+    .CreateRequest("client", "server")
+    .WithValue(new StringValue("action", "login"))
+    .Build();
+```
+
 ### Prerequisites
 
 - **.NET SDK**: 8.0 or later

@@ -15,7 +15,9 @@ Complete API documentation for .NET Container System with code examples and usag
    - [ValueContainer](#valuecontainer)
    - [ValueStore](#valuestore)
    - [Value (Abstract)](#value-abstract)
-2. [Value Types](#value-types)
+2. [Messaging](#messaging)
+   - [ContainerBuilder](#containerbuilder)
+3. [Value Types](#value-types)
    - [NullValue](#nullvalue)
    - [BoolValue](#boolvalue)
    - [Numeric Values](#numeric-values)
@@ -23,12 +25,12 @@ Complete API documentation for .NET Container System with code examples and usag
    - [BytesValue](#bytesvalue)
    - [ContainerValue](#containervalue)
    - [ArrayValue](#arrayvalue)
-3. [Serialization](#serialization)
+4. [Serialization](#serialization)
    - [WireProtocol](#wireprotocol)
    - [JsonV2Adapter](#jsonv2adapter)
-4. [Enumerations](#enumerations)
+5. [Enumerations](#enumerations)
    - [ValueTypes](#valuetypes)
-5. [Usage Examples](#usage-examples)
+6. [Usage Examples](#usage-examples)
 
 ---
 
@@ -279,6 +281,156 @@ public virtual string ToXml()
 public List<Value> Children(bool onlyContainer = false)
 public List<Value> ValueArray(string key)
 public void AddChild(Value child)
+```
+
+---
+
+## Messaging
+
+### ContainerBuilder
+
+Fluent builder for creating `ValueContainer` instances with an idiomatic .NET API.
+
+```csharp
+namespace ContainerSystem.Messaging;
+
+public class ContainerBuilder
+```
+
+#### Methods
+
+##### Source/Target Configuration
+
+```csharp
+// Set source identifier
+public ContainerBuilder WithSource(string id, string subId = "")
+
+// Set target identifier
+public ContainerBuilder WithTarget(string id, string subId = "")
+```
+
+##### Metadata Configuration
+
+```csharp
+// Set message type
+public ContainerBuilder WithMessageType(string messageType)
+
+// Set version
+public ContainerBuilder WithVersion(string version)
+```
+
+##### Value Configuration
+
+```csharp
+// Add single value
+public ContainerBuilder WithValue(Value value)
+
+// Add multiple values (enumerable)
+public ContainerBuilder WithValues(IEnumerable<Value> values)
+
+// Add multiple values (params)
+public ContainerBuilder WithValues(params Value[] values)
+```
+
+##### Thread Safety Configuration
+
+```csharp
+// Enable thread-safe mode
+public ContainerBuilder WithThreadSafety()
+
+// Set thread-safe mode
+public ContainerBuilder WithThreadSafety(bool enabled)
+```
+
+##### Build
+
+```csharp
+// Build the configured container
+public ValueContainer Build()
+```
+
+#### Static Factory Methods
+
+```csharp
+// Create a new builder instance
+public static ContainerBuilder Create()
+
+// Create a builder from an existing container
+public static ContainerBuilder FromContainer(ValueContainer container)
+
+// Create a request container builder
+public static ContainerBuilder CreateRequest(string sourceId, string targetId)
+
+// Create a response container builder
+public static ContainerBuilder CreateResponse(string sourceId, string targetId)
+```
+
+#### Example: Basic Usage
+
+```csharp
+using ContainerSystem.Messaging;
+using ContainerSystem.Values;
+
+// Fluent builder pattern
+var container = new ContainerBuilder()
+    .WithSource("client_app", "session_123")
+    .WithTarget("user_service", "handler")
+    .WithMessageType("user_profile")
+    .WithValue(new StringValue("username", "john_doe"))
+    .WithValue(new IntValue("age", 30))
+    .WithThreadSafety()
+    .Build();
+```
+
+#### Example: Factory Methods
+
+```csharp
+// Create request
+var request = ContainerBuilder
+    .CreateRequest("client", "server")
+    .WithValue(new StringValue("action", "login"))
+    .Build();
+
+// Create response
+var response = ContainerBuilder
+    .CreateResponse("server", "client")
+    .WithValue(new IntValue("status", 200))
+    .Build();
+
+// Clone and modify existing container
+using var original = new ValueContainer();
+original.SetSource("old_source");
+
+var modified = ContainerBuilder
+    .FromContainer(original)
+    .WithSource("new_source")
+    .WithValue(new StringValue("extra", "data"))
+    .Build();
+```
+
+#### Example: Multiple Values
+
+```csharp
+var values = new List<Value>
+{
+    new StringValue("tag", "important"),
+    new StringValue("tag", "urgent"),
+    new IntValue("priority", 1)
+};
+
+var container = new ContainerBuilder()
+    .WithMessageType("task")
+    .WithValues(values)
+    .Build();
+
+// Or using params
+var container2 = new ContainerBuilder()
+    .WithMessageType("task")
+    .WithValues(
+        new StringValue("tag", "important"),
+        new StringValue("tag", "urgent"),
+        new IntValue("priority", 1))
+    .Build();
 ```
 
 ---
