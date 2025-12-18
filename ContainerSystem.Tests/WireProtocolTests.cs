@@ -265,8 +265,8 @@ public class WireProtocolTests : IDisposable
         var wireData = WireProtocol.Serialize(_container);
         using var result = WireProtocol.Deserialize(wireData);
 
-        Assert.Equal(100, result.GetValue("short")?.ToShort());
-        Assert.Equal(200, result.GetValue("ushort")?.ToUShort());
+        Assert.Equal((short)100, result.GetValue("short")?.ToShort());
+        Assert.Equal((ushort)200, result.GetValue("ushort")?.ToUShort());
         Assert.Equal(300, result.GetValue("int")?.ToInt());
         Assert.Equal(400u, result.GetValue("uint")?.ToUInt());
         Assert.Equal(500, result.GetValue("long")?.ToLong());
@@ -323,7 +323,7 @@ public class WireProtocolTests : IDisposable
     [Fact]
     public void Deserialize_NullData_ThrowsArgumentException()
     {
-        Assert.Throws<ArgumentException>(() => WireProtocol.Deserialize(null!));
+        Assert.Throws<ArgumentException>(() => WireProtocol.Deserialize((string)null!));
     }
 
     [Fact]
