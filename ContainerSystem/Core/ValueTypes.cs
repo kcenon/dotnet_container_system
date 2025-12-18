@@ -56,10 +56,10 @@ public enum ValueTypes
     /// <summary>Unsigned integer (32-bit unsigned)</summary>
     UIntValue = 5,
 
-    /// <summary>Long integer (64-bit signed)</summary>
+    /// <summary>Long integer (32-bit signed, maps to C++ 'long'). Use LLongValue (type 8) for 64-bit.</summary>
     LongValue = 6,
 
-    /// <summary>Unsigned long integer (64-bit unsigned)</summary>
+    /// <summary>Unsigned long integer (32-bit unsigned, maps to C++ 'unsigned long'). Use ULLongValue (type 9) for 64-bit.</summary>
     ULongValue = 7,
 
     /// <summary>Long long integer (64-bit signed, same as Long in .NET)</summary>

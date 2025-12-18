@@ -37,10 +37,21 @@ public class UIntValue : Value
 
 /// <summary>
 /// Unsigned long integer value (type 7) - 32-bit unsigned range.
-/// Policy: Enforces 32-bit range [0, 2^32-1].
-/// Values exceeding this range should use ULLongValue.
-/// Always serializes as 4 bytes (uint32) regardless of platform.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Cross-Language Compatibility Warning:</b> This type exists for cross-language compatibility
+/// with C++ where 'unsigned long' is typically 32-bit. In C#, this wraps a <see cref="ulong"/> but enforces
+/// <see cref="uint"/> (UInt32) limits during construction and serialization.
+/// </para>
+/// <para>
+/// <b>Policy:</b> Enforces 32-bit range [0, 2^32-1]. Values exceeding this range will throw
+/// <see cref="OverflowException"/>. Use <see cref="ULLongValue"/> for true 64-bit values.
+/// </para>
+/// <para>
+/// Always serializes as 4 bytes (uint32) regardless of platform.
+/// </para>
+/// </remarks>
 public class ULongValue : Value
 {
     // 32-bit unsigned range constant

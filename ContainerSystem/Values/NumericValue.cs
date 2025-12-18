@@ -36,10 +36,21 @@ public class IntValue : Value
 
 /// <summary>
 /// Long integer value (type 6) - 32-bit signed range.
-/// Policy: Enforces 32-bit range [-2^31, 2^31-1].
-/// Values exceeding this range should use LLongValue.
-/// Always serializes as 4 bytes (int32) regardless of platform.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Cross-Language Compatibility Warning:</b> This type exists for cross-language compatibility
+/// with C++ where 'long' is typically 32-bit. In C#, this wraps a <see cref="long"/> but enforces
+/// <see cref="int"/> (Int32) limits during construction and serialization.
+/// </para>
+/// <para>
+/// <b>Policy:</b> Enforces 32-bit range [-2^31, 2^31-1]. Values exceeding this range will throw
+/// <see cref="OverflowException"/>. Use <see cref="LLongValue"/> for true 64-bit values.
+/// </para>
+/// <para>
+/// Always serializes as 4 bytes (int32) regardless of platform.
+/// </para>
+/// </remarks>
 public class LongValue : Value
 {
     // 32-bit signed range constants
