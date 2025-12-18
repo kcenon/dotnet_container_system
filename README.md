@@ -80,6 +80,7 @@ scripts\build.bat       # Windows (CMD)
 - **JSON**: Human-readable, debugging-friendly
 - **XML**: Structured format for enterprise systems
 - **JSON v2.0**: Cross-language compatible format
+- **Wire Protocol**: C++ native protocol for direct interop
 
 ### Thread Safety
 - **ReaderWriterLockSlim**: Efficient concurrent access
