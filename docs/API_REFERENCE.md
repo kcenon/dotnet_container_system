@@ -116,7 +116,7 @@ string json = container.Serialize();
 
 ### ValueStore
 
-Key-value storage backend with optional thread safety.
+Key-value storage backend with optional thread safety and multi-value per key support.
 
 ```csharp
 namespace ContainerSystem.Core;
@@ -128,11 +128,14 @@ public class ValueStore
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `ThreadSafe` | `bool` | Thread-safe mode enabled |
-| `Count` | `int` | Number of stored values |
+| `IsThreadSafe` | `bool` | Thread-safe mode enabled |
+| `Size` | `int` | Number of unique keys |
+| `TotalValueCount` | `int` | Total values across all keys |
+| `Empty` | `bool` | True if store has no values |
 | `ReadCount` | `long` | Number of read operations |
 | `WriteCount` | `long` | Number of write operations |
-| `SerializationCount` | `long` | Number of serializations |
+| `Keys` | `IEnumerable<string>` | All keys in the store |
+| `Values` | `IEnumerable<Value>` | All values (flattened) |
 
 #### Constructors
 
@@ -140,36 +143,86 @@ public class ValueStore
 // Default (not thread-safe)
 public ValueStore()
 
-// With thread-safe option
-public ValueStore(bool threadSafe)
+// With options
+public ValueStore(bool threadSafe = false, int initialCapacity = 16)
 ```
 
 #### Methods
 
 ```csharp
-// Add value
-public void Add(Value value)
+// Add value (appends to existing key)
+public void Add(string key, Value value)
 
-// Get value by key
+// Set value (replaces all values for key)
+public void Set(string key, Value value)
+
+// Get first value by key (API compatibility)
 public Value? Get(string key)
 
-// Get all values with key
-public List<Value> GetAll(string key)
+// Get all values for a key
+public IReadOnlyList<Value> GetValues(string key)
 
-// Get all values
-public List<Value> GetAllValues()
+// Get count of values for a key
+public int GetValueCount(string key)
 
-// Remove by key
+// Check if key exists
+public bool Contains(string key)
+
+// Remove all values for a key
 public bool Remove(string key)
 
-// Clear all
+// Remove specific value from a key
+public bool RemoveValue(string key, Value value)
+
+// Clear all values
 public void Clear()
 
-// Serialize to binary
-public byte[] Serialize()
+// Enable/disable thread safety
+public void EnableThreadSafety()
+public void DisableThreadSafety()
 
-// Deserialize from binary
-public void Deserialize(byte[] data)
+// Reset statistics
+public void ResetStatistics()
+```
+
+#### Indexer
+
+```csharp
+// Get: returns first value (or null)
+// Set: replaces all values for key (single-value semantics)
+public Value? this[string key] { get; set; }
+```
+
+#### Example: Multi-Value Support
+
+```csharp
+var store = new ValueStore();
+
+// Add multiple values with same key
+store.Add("tag", new StringValue("tag", "important"));
+store.Add("tag", new StringValue("tag", "urgent"));
+store.Add("tag", new StringValue("tag", "review"));
+
+// Get first value
+var first = store.Get("tag");  // returns "important"
+
+// Get all values for key
+var allTags = store.GetValues("tag");  // returns 3 values
+
+// Get count for key
+var count = store.GetValueCount("tag");  // returns 3
+
+// Total vs Size
+store.Add("other", new IntValue("other", 42));
+Console.WriteLine($"Keys: {store.Size}");           // 2
+Console.WriteLine($"Values: {store.TotalValueCount}");  // 4
+
+// Set replaces all values
+store.Set("tag", new StringValue("tag", "single"));
+Console.WriteLine(store.GetValueCount("tag"));  // 1
+
+// Indexer uses Set semantics
+store["tag"] = new StringValue("tag", "replaced");  // replaces
 ```
 
 ---
