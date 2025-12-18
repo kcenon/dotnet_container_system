@@ -201,7 +201,7 @@ public class ValueStore : IDisposable
                 _rwLock.ExitReadLock();
             }
         }
-        return _values.TryGetValue(key, out var list) ? list.Count : 0;
+        return _values.TryGetValue(key, out var values) ? values.Count : 0;
     }
 
     /// <summary>
