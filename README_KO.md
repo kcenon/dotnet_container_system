@@ -48,6 +48,28 @@ var restored = new ValueContainer(json);
 var username = restored.GetValue("username")?.ToString();
 ```
 
+### Fluent 빌더 패턴
+
+```csharp
+using ContainerSystem.Messaging;
+
+// Fluent 빌더를 사용한 컨테이너 생성
+var container = new ContainerBuilder()
+    .WithSource("client_app", "session_123")
+    .WithTarget("user_service", "handler")
+    .WithMessageType("user_profile")
+    .WithValue(new StringValue("username", "john_doe"))
+    .WithValue(new IntValue("age", 30))
+    .WithThreadSafety()
+    .Build();
+
+// 또는 편의 팩토리 메서드 사용
+var request = ContainerBuilder
+    .CreateRequest("client", "server")
+    .WithValue(new StringValue("action", "login"))
+    .Build();
+```
+
 ### 필수 조건
 
 - **.NET SDK**: 8.0 이상
