@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Special character escaping for protocol delimiters
   - Header field encoding (target, source, message_type, version)
 - Comprehensive unit tests for wire protocol (25+ tests)
+- **ValueStore**: Multi-value per key support (Issue #8)
+  - Changed internal storage from `Dictionary<string, Value>` to `Dictionary<string, List<Value>>`
+  - `Add()` now appends values to existing keys instead of replacing
+  - `GetValues(key)` returns all values for a key as `IReadOnlyList<Value>`
+  - `GetValueCount(key)` returns count of values for a key
+  - `Set(key, value)` replaces all values with single value
+  - `RemoveValue(key, value)` removes specific value from key
+  - `TotalValueCount` property for total values across all keys
+  - Indexer set now uses single-value semantics (calls Set)
+  - Ensures interoperability with C++/Rust multi-value support
 
 ### Fixed
 - **WireProtocol**: Fixed parsing of escaped special characters (`\[`, `\]`, `\,`, `\;`)

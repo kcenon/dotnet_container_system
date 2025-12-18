@@ -13,13 +13,14 @@ namespace ContainerSystem.Core;
 ///
 /// Features:
 /// - O(1) average lookup via Dictionary
+/// - Multiple values per key support (Dictionary-of-Lists structure)
 /// - Optional thread-safe mode with ReaderWriterLockSlim
 /// - Read/write statistics tracking
 /// - Conditional locking for single-threaded performance
 /// </summary>
 public class ValueStore : IDisposable
 {
-    private readonly Dictionary<string, Value> _values;
+    private readonly Dictionary<string, List<Value>> _values;
     private readonly ReaderWriterLockSlim _rwLock;
     private volatile bool _threadSafeEnabled;
     private long _readCount;
@@ -33,7 +34,7 @@ public class ValueStore : IDisposable
     /// <param name="initialCapacity">Initial capacity for internal dictionary</param>
     public ValueStore(bool threadSafe = false, int initialCapacity = 16)
     {
-        _values = new Dictionary<string, Value>(initialCapacity);
+        _values = new Dictionary<string, List<Value>>(initialCapacity);
         _rwLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
         _threadSafeEnabled = threadSafe;
         _readCount = 0;
@@ -42,7 +43,7 @@ public class ValueStore : IDisposable
     }
 
     /// <summary>
-    /// Adds or updates a value in the store.
+    /// Adds a value to the store. Multiple values can be stored under the same key.
     /// Equivalent to C++ value_store::add().
     /// </summary>
     /// <param name="key">The key/name for the value</param>
@@ -54,7 +55,7 @@ public class ValueStore : IDisposable
             _rwLock.EnterWriteLock();
             try
             {
-                _values[key] = value;
+                AddInternal(key, value);
                 Interlocked.Increment(ref _writeCount);
             }
             finally
@@ -64,17 +65,57 @@ public class ValueStore : IDisposable
         }
         else
         {
-            _values[key] = value;
+            AddInternal(key, value);
+            Interlocked.Increment(ref _writeCount);
+        }
+    }
+
+    private void AddInternal(string key, Value value)
+    {
+        if (_values.TryGetValue(key, out var list))
+        {
+            list.Add(value);
+        }
+        else
+        {
+            _values[key] = new List<Value> { value };
+        }
+    }
+
+    /// <summary>
+    /// Sets a single value for the key, replacing all existing values.
+    /// Useful when single-value semantics are required.
+    /// </summary>
+    /// <param name="key">The key/name for the value</param>
+    /// <param name="value">The value to store</param>
+    public void Set(string key, Value value)
+    {
+        if (_threadSafeEnabled)
+        {
+            _rwLock.EnterWriteLock();
+            try
+            {
+                _values[key] = new List<Value> { value };
+                Interlocked.Increment(ref _writeCount);
+            }
+            finally
+            {
+                _rwLock.ExitWriteLock();
+            }
+        }
+        else
+        {
+            _values[key] = new List<Value> { value };
             Interlocked.Increment(ref _writeCount);
         }
     }
 
     /// <summary>
-    /// Gets a value by key.
+    /// Gets the first value by key for API compatibility.
     /// Equivalent to C++ value_store::get().
     /// </summary>
     /// <param name="key">The key to search for</param>
-    /// <returns>The value if found, null otherwise</returns>
+    /// <returns>The first value if found, null otherwise</returns>
     public Value? Get(string key)
     {
         if (_threadSafeEnabled)
@@ -82,10 +123,10 @@ public class ValueStore : IDisposable
             _rwLock.EnterReadLock();
             try
             {
-                if (_values.TryGetValue(key, out var value))
+                if (_values.TryGetValue(key, out var list) && list.Count > 0)
                 {
                     Interlocked.Increment(ref _readCount);
-                    return value;
+                    return list[0];
                 }
                 return null;
             }
@@ -96,13 +137,71 @@ public class ValueStore : IDisposable
         }
         else
         {
-            if (_values.TryGetValue(key, out var value))
+            if (_values.TryGetValue(key, out var list) && list.Count > 0)
             {
                 Interlocked.Increment(ref _readCount);
-                return value;
+                return list[0];
             }
             return null;
         }
+    }
+
+    /// <summary>
+    /// Gets all values associated with a key.
+    /// Use this method when multiple values per key are expected.
+    /// </summary>
+    /// <param name="key">The key to search for</param>
+    /// <returns>Read-only list of values, empty if key not found</returns>
+    public IReadOnlyList<Value> GetValues(string key)
+    {
+        if (_threadSafeEnabled)
+        {
+            _rwLock.EnterReadLock();
+            try
+            {
+                if (_values.TryGetValue(key, out var list))
+                {
+                    Interlocked.Increment(ref _readCount);
+                    return list.AsReadOnly();
+                }
+                return Array.Empty<Value>();
+            }
+            finally
+            {
+                _rwLock.ExitReadLock();
+            }
+        }
+        else
+        {
+            if (_values.TryGetValue(key, out var list))
+            {
+                Interlocked.Increment(ref _readCount);
+                return list.AsReadOnly();
+            }
+            return Array.Empty<Value>();
+        }
+    }
+
+    /// <summary>
+    /// Gets the count of values for a specific key.
+    /// </summary>
+    /// <param name="key">The key to count values for</param>
+    /// <returns>Number of values for the key, 0 if key not found</returns>
+    public int GetValueCount(string key)
+    {
+        if (_threadSafeEnabled)
+        {
+            _rwLock.EnterReadLock();
+            try
+            {
+                return _values.TryGetValue(key, out var list) ? list.Count : 0;
+            }
+            finally
+            {
+                _rwLock.ExitReadLock();
+            }
+        }
+        return _values.TryGetValue(key, out var values) ? values.Count : 0;
     }
 
     /// <summary>
@@ -129,7 +228,7 @@ public class ValueStore : IDisposable
     }
 
     /// <summary>
-    /// Removes a value by key.
+    /// Removes all values for a key.
     /// Equivalent to C++ value_store::remove().
     /// </summary>
     /// <param name="key">The key to remove</param>
@@ -149,6 +248,47 @@ public class ValueStore : IDisposable
             }
         }
         return _values.Remove(key);
+    }
+
+    /// <summary>
+    /// Removes a specific value from a key's value list.
+    /// </summary>
+    /// <param name="key">The key to remove from</param>
+    /// <param name="value">The specific value to remove</param>
+    /// <returns>True if the value was removed</returns>
+    public bool RemoveValue(string key, Value value)
+    {
+        if (_threadSafeEnabled)
+        {
+            _rwLock.EnterWriteLock();
+            try
+            {
+                return RemoveValueInternal(key, value);
+            }
+            finally
+            {
+                _rwLock.ExitWriteLock();
+            }
+        }
+        return RemoveValueInternal(key, value);
+    }
+
+    private bool RemoveValueInternal(string key, Value value)
+    {
+        if (!_values.TryGetValue(key, out var list))
+        {
+            return false;
+        }
+
+        var removed = list.Remove(value);
+
+        // Clean up empty list
+        if (list.Count == 0)
+        {
+            _values.Remove(key);
+        }
+
+        return removed;
     }
 
     /// <summary>
@@ -176,7 +316,7 @@ public class ValueStore : IDisposable
     }
 
     /// <summary>
-    /// Gets the number of values in the store.
+    /// Gets the number of unique keys in the store.
     /// Equivalent to C++ value_store::size().
     /// </summary>
     public int Size
@@ -196,6 +336,29 @@ public class ValueStore : IDisposable
                 }
             }
             return _values.Count;
+        }
+    }
+
+    /// <summary>
+    /// Gets the total number of values across all keys.
+    /// </summary>
+    public int TotalValueCount
+    {
+        get
+        {
+            if (_threadSafeEnabled)
+            {
+                _rwLock.EnterReadLock();
+                try
+                {
+                    return _values.Values.Sum(list => list.Count);
+                }
+                finally
+                {
+                    _rwLock.ExitReadLock();
+                }
+            }
+            return _values.Values.Sum(list => list.Count);
         }
     }
 
@@ -275,7 +438,7 @@ public class ValueStore : IDisposable
     }
 
     /// <summary>
-    /// Gets all values in the store.
+    /// Gets all values in the store (flattened from all keys).
     /// </summary>
     public IEnumerable<Value> Values
     {
@@ -286,19 +449,20 @@ public class ValueStore : IDisposable
                 _rwLock.EnterReadLock();
                 try
                 {
-                    return _values.Values.ToList();
+                    return _values.Values.SelectMany(list => list).ToList();
                 }
                 finally
                 {
                     _rwLock.ExitReadLock();
                 }
             }
-            return _values.Values.ToList();
+            return _values.Values.SelectMany(list => list).ToList();
         }
     }
 
     /// <summary>
     /// Indexer for convenient access.
+    /// Setting a value replaces all existing values for the key (single-value semantics).
     /// </summary>
     public Value? this[string key]
     {
@@ -306,7 +470,7 @@ public class ValueStore : IDisposable
         set
         {
             if (value != null)
-                Add(key, value);
+                Set(key, value);
             else
                 Remove(key);
         }
