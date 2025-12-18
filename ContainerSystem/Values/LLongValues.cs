@@ -52,6 +52,7 @@ public class ULLongValue : Value
     public override string Data() => _value.ToString();
     public override int Size() => sizeof(ulong);
     public override byte[] Serialize() => BitConverter.GetBytes(_value);
+    public override ulong ToULong() => _value;
     public override int ToInt() => (int)_value;
     public override long ToLong() => (long)_value;
     public override float ToFloat() => _value;

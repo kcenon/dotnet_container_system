@@ -26,6 +26,7 @@ public class UIntValue : Value
     public override string Data() => _value.ToString();
     public override int Size() => sizeof(uint);
     public override byte[] Serialize() => BitConverter.GetBytes(_value);
+    public override uint ToUInt() => _value;
     public override int ToInt() => (int)_value;
     public override long ToLong() => _value;
     public override float ToFloat() => _value;
@@ -64,6 +65,7 @@ public class ULongValue : Value
     public override string Data() => _value.ToString();
     public override int Size() => sizeof(uint);  // Always 4 bytes
     public override byte[] Serialize() => BitConverter.GetBytes(_value);
+    public override ulong ToULong() => _value;
     public override int ToInt() => (int)_value;
     public override long ToLong() => _value;
     public override float ToFloat() => _value;
