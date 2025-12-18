@@ -109,17 +109,123 @@ public class ValueStoreTests : IDisposable
     }
 
     // ========================================================================
-    // Update Tests
+    // Multi-Value Support Tests
     // ========================================================================
 
     [Fact]
-    public void Store_AddUpdatesExistingKey()
+    public void Store_AddAppendsToExistingKey()
     {
         _store.Add("key", new IntValue("key", 1));
         _store.Add("key", new IntValue("key", 2));
 
         Assert.Equal(1, _store.Size);
+        Assert.Equal(2, _store.TotalValueCount);
+        Assert.Equal(1, _store.Get("key")?.ToInt()); // Get returns first value
+    }
+
+    [Fact]
+    public void Store_GetValuesReturnsAllValuesForKey()
+    {
+        _store.Add("tag", new IntValue("tag", 1));
+        _store.Add("tag", new IntValue("tag", 2));
+        _store.Add("tag", new IntValue("tag", 3));
+
+        var values = _store.GetValues("tag");
+
+        Assert.Equal(3, values.Count);
+        Assert.Equal(1, values[0].ToInt());
+        Assert.Equal(2, values[1].ToInt());
+        Assert.Equal(3, values[2].ToInt());
+    }
+
+    [Fact]
+    public void Store_GetValuesReturnsEmptyForNonExistent()
+    {
+        var values = _store.GetValues("nonexistent");
+        Assert.Empty(values);
+    }
+
+    [Fact]
+    public void Store_GetValueCountReturnsCorrectCount()
+    {
+        _store.Add("key", new IntValue("key", 1));
+        _store.Add("key", new IntValue("key", 2));
+
+        Assert.Equal(2, _store.GetValueCount("key"));
+        Assert.Equal(0, _store.GetValueCount("nonexistent"));
+    }
+
+    [Fact]
+    public void Store_SetReplacesAllValues()
+    {
+        _store.Add("key", new IntValue("key", 1));
+        _store.Add("key", new IntValue("key", 2));
+        _store.Set("key", new IntValue("key", 99));
+
+        Assert.Equal(1, _store.GetValueCount("key"));
+        Assert.Equal(99, _store.Get("key")?.ToInt());
+    }
+
+    [Fact]
+    public void Store_TotalValueCountAcrossAllKeys()
+    {
+        _store.Add("a", new IntValue("a", 1));
+        _store.Add("a", new IntValue("a", 2));
+        _store.Add("b", new IntValue("b", 3));
+
+        Assert.Equal(2, _store.Size);
+        Assert.Equal(3, _store.TotalValueCount);
+    }
+
+    [Fact]
+    public void Store_RemoveValueRemovesSpecificValue()
+    {
+        var val1 = new IntValue("key", 1);
+        var val2 = new IntValue("key", 2);
+        _store.Add("key", val1);
+        _store.Add("key", val2);
+
+        var removed = _store.RemoveValue("key", val1);
+
+        Assert.True(removed);
+        Assert.Equal(1, _store.GetValueCount("key"));
         Assert.Equal(2, _store.Get("key")?.ToInt());
+    }
+
+    [Fact]
+    public void Store_RemoveValueCleansUpEmptyList()
+    {
+        var val1 = new IntValue("key", 1);
+        _store.Add("key", val1);
+
+        _store.RemoveValue("key", val1);
+
+        Assert.False(_store.Contains("key"));
+        Assert.Equal(0, _store.Size);
+    }
+
+    [Fact]
+    public void Store_IndexerSetUsesSingleValueSemantics()
+    {
+        _store.Add("key", new IntValue("key", 1));
+        _store.Add("key", new IntValue("key", 2));
+
+        _store["key"] = new IntValue("key", 99);
+
+        Assert.Equal(1, _store.GetValueCount("key"));
+        Assert.Equal(99, _store.Get("key")?.ToInt());
+    }
+
+    [Fact]
+    public void Store_ValuesReturnsAllValuesFlattenedForMultipleKeys()
+    {
+        _store.Add("a", new IntValue("a", 1));
+        _store.Add("a", new IntValue("a", 2));
+        _store.Add("b", new IntValue("b", 3));
+
+        var values = _store.Values.ToList();
+
+        Assert.Equal(3, values.Count);
     }
 
     // ========================================================================
