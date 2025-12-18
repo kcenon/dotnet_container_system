@@ -263,12 +263,58 @@ public static class WireProtocol
 
     #region Private Deserialization Helpers
 
+    /// <summary>
+    /// Extracts entries from content, properly handling escaped brackets.
+    /// Returns the content inside each [...] without the brackets.
+    /// </summary>
+    private static List<string> ExtractEntries(string content)
+    {
+        var result = new List<string>();
+        var current = new StringBuilder();
+        bool escaped = false;
+        bool inEntry = false;
+
+        foreach (char c in content)
+        {
+            if (escaped)
+            {
+                if (inEntry)
+                {
+                    current.Append('\\');
+                    current.Append(c);
+                }
+                escaped = false;
+            }
+            else if (c == '\\')
+            {
+                escaped = true;
+            }
+            else if (c == '[' && !inEntry)
+            {
+                inEntry = true;
+                current.Clear();
+            }
+            else if (c == ']' && inEntry)
+            {
+                result.Add(current.ToString());
+                current.Clear();
+                inEntry = false;
+            }
+            else if (inEntry)
+            {
+                current.Append(c);
+            }
+        }
+
+        return result;
+    }
+
     private static void ParseHeader(ValueContainer container, string headerContent)
     {
-        var entries = EntryPattern.Matches(headerContent);
-        foreach (Match entry in entries)
+        var entries = ExtractEntries(headerContent);
+        foreach (var entryContent in entries)
         {
-            var parts = SplitEntry(entry.Groups[1].Value, 2);
+            var parts = SplitEntry(entryContent, 2);
             if (parts.Length >= 2 && int.TryParse(parts[0], out var fieldId))
             {
                 var value = UnescapeValue(parts[1]);
@@ -305,10 +351,10 @@ public static class WireProtocol
 
     private static void ParseData(ValueContainer container, string dataContent)
     {
-        var entries = EntryPattern.Matches(dataContent);
-        foreach (Match entry in entries)
+        var entries = ExtractEntries(dataContent);
+        foreach (var entryContent in entries)
         {
-            var parts = SplitEntry(entry.Groups[1].Value, 3);
+            var parts = SplitEntry(entryContent, 3);
             if (parts.Length >= 3)
             {
                 var name = UnescapeValue(parts[0]);
