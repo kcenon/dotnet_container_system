@@ -11,6 +11,9 @@
 - [Overview](#overview)
 - [Design Philosophy](#design-philosophy)
 - [System Architecture](#system-architecture)
+- [Core Components](#core-components)
+- [Data Flow](#data-flow)
+- [Concurrency Model](#concurrency-model)
 - [Value Type System](#value-type-system)
 - [Long/ULong Type Policy](#longulong-type-policy)
 - [Serialization Architecture](#serialization-architecture)
@@ -19,12 +22,13 @@
 - [Cross-Language Compatibility](#cross-language-compatibility)
 - [Performance Considerations](#performance-considerations)
 - [Best Practices](#best-practices)
+- [Cross-References](#cross-references)
 
 ---
 
 ## Overview
 
-The .NET container system provides a type-safe, cross-language compatible data serialization framework. It implements the unified long/ulong type policy to ensure binary compatibility with C++, Python, Go, Rust, and Node.js/TypeScript implementations.
+The .NET Container System is the C# implementation of the KCENON Container System, designed for **high-performance message exchange** across multiple programming languages. It provides a type-safe, cross-language compatible data serialization framework with the unified long/ulong type policy to ensure binary compatibility with C++, Python, Go, Rust, and Node.js/TypeScript implementations.
 
 ### Key Features
 
@@ -111,6 +115,236 @@ IValue (interface)
     ├── BytesValue
     ├── Container
     └── ArrayValue
+```
+
+---
+
+## Core Components
+
+### ValueContainer
+
+The `ValueContainer` is the main entry point for the container system. It holds:
+
+- **Header**: Metadata including source/target IDs, message type, and version
+- **Body**: A list of `Value` objects stored internally
+
+```csharp
+public class ValueContainer : IEnumerable<Value>, IDisposable
+{
+    // Header fields
+    private string _messageType;
+    private string _sourceId;
+    private string _sourceSubId;
+    private string _targetId;
+    private string _targetSubId;
+    private string _version;
+
+    // Body - list of values
+    private readonly List<Value> _values;
+
+    // Thread safety via ReaderWriterLockSlim
+    private readonly ReaderWriterLockSlim _rwLock;
+    private volatile bool _threadSafeEnabled;
+}
+```
+
+### ValueStore
+
+The `ValueStore` provides a high-performance key-value storage engine with the following characteristics:
+
+#### Dictionary-of-Lists Structure
+
+The internal storage uses a **Dictionary-of-Lists** pattern, allowing multiple values to be stored under the same key:
+
+```csharp
+private readonly Dictionary<string, List<Value>> _values;
+```
+
+This design enables:
+- **O(1) average lookup** for key-based access
+- **Multiple values per key** support for array-like semantics
+- **Efficient iteration** over all values
+
+#### Thread-Safety Model
+
+Thread safety is implemented using `ReaderWriterLockSlim`:
+
+```csharp
+private readonly ReaderWriterLockSlim _rwLock;
+private volatile bool _threadSafeEnabled;
+```
+
+- **Read operations**: Use `EnterReadLock()` - multiple concurrent readers allowed
+- **Write operations**: Use `EnterWriteLock()` - exclusive access
+- **Statistics tracking**: Read/write counts via `Interlocked` operations
+
+### Value Hierarchy
+
+All value types inherit from the abstract `Value` base class and map to Protocol IDs:
+
+| Protocol ID | Type Name | .NET Type | Size (bytes) |
+|-------------|-----------|-----------|--------------|
+| 0 | BoolValue | bool | 1 |
+| 1 | ShortValue | Int16 | 2 |
+| 2 | UShortValue | UInt16 | 2 |
+| 3 | IntValue | Int32 | 4 |
+| 4 | UIntValue | UInt32 | 4 |
+| 5 | FloatValue | Single | 4 |
+| 6 | LongValue | Int32 | 4 |
+| 7 | ULongValue | UInt32 | 4 |
+| 8 | LLongValue | Int64 | 8 |
+| 9 | ULLongValue | UInt64 | 8 |
+| 10 | DoubleValue | Double | 8 |
+| 11 | StringValue | string | variable |
+| 12 | BytesValue | byte[] | variable |
+| 13 | ContainerValue | nested | variable |
+| 14 | ArrayValue | array | variable |
+
+---
+
+## Data Flow
+
+The following diagram illustrates the typical data flow in the container system:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                          User Code                              │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     ValueContainerFactory                        │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ • Create()          - Create empty container            │    │
+│  │ • Create(msgType)   - Create with message type          │    │
+│  │ • FromJson(json)    - Deserialize from JSON             │    │
+│  │ • FromBytes(data)   - Deserialize from bytes            │    │
+│  │ • CreateBuilder()   - Fluent builder pattern            │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                              │                                   │
+│                              │ ApplyOptions()                    │
+│                              │ (thread safety, etc.)             │
+│                              ▼                                   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      ValueContainer                              │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ Header: source_id, target_id, message_type, version     │    │
+│  ├─────────────────────────────────────────────────────────┤    │
+│  │ Body: List<Value>                                       │    │
+│  │   ├── Add(value)                                        │    │
+│  │   ├── GetValue(key)                                     │    │
+│  │   └── SetValue(key, value)                              │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                              │                                   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       Serialization                              │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌────────────────┐  │
+│  │   ToJson()      │  │   ToXml()       │  │ SerializeArray │  │
+│  │   JSON format   │  │   XML format    │  │ byte[] output  │  │
+│  └─────────────────┘  └─────────────────┘  └────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Typical Usage Flow
+
+```csharp
+// 1. Create via Factory (DI recommended)
+var factory = new ValueContainerFactory(options);
+var container = factory.Create("request_message");
+
+// 2. Add values
+container.Add(new StringValue("user", "alice"));
+container.Add(new IntValue("age", 30));
+
+// 3. Serialize for transport
+byte[] data = container.SerializeArray();
+
+// 4. Deserialize on receiver
+var received = factory.FromBytes(data);
+var user = received.GetValue("user")?.ToString();
+```
+
+---
+
+## Concurrency Model
+
+### Default Behavior
+
+**IMPORTANT**: Container instances are **NOT thread-safe by default**. This design choice optimizes for single-threaded scenarios which are more common.
+
+### Enabling Thread Safety
+
+Thread safety can be enabled in two ways:
+
+#### 1. Per-Instance Activation
+
+```csharp
+var container = new ValueContainer();
+container.EnableThreadSafety();  // Now thread-safe
+
+// Check status
+bool isSafe = container.IsThreadSafe;  // true
+```
+
+#### 2. Via Dependency Injection (Recommended)
+
+```csharp
+// In Startup.cs or Program.cs
+services.AddContainerSystem(options =>
+{
+    options.EnableThreadSafetyByDefault = true;
+});
+
+// All containers created via factory will be thread-safe
+public class MyService
+{
+    private readonly IValueContainerFactory _factory;
+
+    public MyService(IValueContainerFactory factory)
+    {
+        _factory = factory;
+    }
+
+    public ValueContainer CreateSafeContainer()
+    {
+        // Automatically thread-safe due to DI configuration
+        return _factory.Create("my_message");
+    }
+}
+```
+
+### Lock Semantics
+
+When thread safety is enabled:
+
+| Operation | Lock Type | Behavior |
+|-----------|-----------|----------|
+| Read (GetValue, Count, etc.) | `EnterReadLock()` | Multiple concurrent readers |
+| Write (Add, SetValue, etc.) | `EnterWriteLock()` | Exclusive access |
+| Iteration | Snapshot | Creates copy for safe enumeration |
+
+### Performance Trade-offs
+
+```csharp
+// Single-threaded (default) - fastest
+var container = new ValueContainer();
+for (int i = 0; i < 1000000; i++)
+{
+    container.Add(new IntValue($"key_{i}", i));
+}
+
+// Multi-threaded - ~10-15% overhead
+container.EnableThreadSafety();
+Parallel.For(0, 1000000, i =>
+{
+    container.Add(new IntValue($"key_{i}", i));
+});
 ```
 
 ---
@@ -694,6 +928,26 @@ public void LongValue_RejectsOverflow()
 
 ---
 
+## Cross-References
+
+### Related Container System Implementations
+
+This .NET implementation is part of the KCENON Container System family, designed for cross-language interoperability:
+
+| Language | Repository | Notes |
+|----------|------------|-------|
+| **Rust** | [rust_container_system](https://github.com/kcenon/rust_container_system) | **Gold Standard** for protocol behavior |
+| **C++** | [cpp_container_system](https://github.com/kcenon/cpp_container_system) | High-performance native implementation |
+| **Python** | [python_container_system](https://github.com/kcenon/python_container_system) | Scripting and prototyping |
+| **Node.js** | [node_container_system](https://github.com/kcenon/node_container_system) | JavaScript/TypeScript support |
+| **Go** | [go_container_system](https://github.com/kcenon/go_container_system) | Cloud-native applications |
+
+### Protocol Compatibility
+
+All implementations follow the unified wire protocol defined in `rust_container_system/ARCHITECTURE.md`. When in doubt about serialization behavior or edge cases, refer to the Rust implementation as the authoritative source.
+
+---
+
 ## References
 
 - **Policy Document**: `CONTAINER_SYSTEMS_UNIFIED_LONG_POLICY.md`
@@ -705,5 +959,5 @@ public void LongValue_RejectsOverflow()
 
 **Maintainer**: kcenon@naver.com
 **License**: BSD 3-Clause
-**Version**: 1.0.0
-**Last Updated**: 2025-10-27
+**Version**: 1.1.0
+**Last Updated**: 2025-12-18
