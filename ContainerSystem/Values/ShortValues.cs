@@ -26,6 +26,7 @@ public class ShortValue : Value
     public override string Data() => _value.ToString();
     public override int Size() => sizeof(short);
     public override byte[] Serialize() => BitConverter.GetBytes(_value);
+    public override short ToShort() => _value;
     public override int ToInt() => _value;
     public override long ToLong() => _value;
     public override float ToFloat() => _value;
@@ -50,6 +51,7 @@ public class UShortValue : Value
     public override string Data() => _value.ToString();
     public override int Size() => sizeof(ushort);
     public override byte[] Serialize() => BitConverter.GetBytes(_value);
+    public override ushort ToUShort() => _value;
     public override int ToInt() => _value;
     public override long ToLong() => _value;
     public override float ToFloat() => _value;
