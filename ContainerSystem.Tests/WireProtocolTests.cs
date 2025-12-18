@@ -349,7 +349,8 @@ public class WireProtocolTests : IDisposable
     {
         var success = WireProtocol.TryDeserialize("invalid data", out var result);
 
-        Assert.True(success); // Parser is lenient, returns empty container
+        Assert.False(success);
+        Assert.Null(result);
     }
 
     // ========================================================================
