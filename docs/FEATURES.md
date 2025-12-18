@@ -175,21 +175,46 @@ user.Add(new ContainerValue("address", address));
 
 ### 6. Multiple Values with Same Name
 
-Support for repeated values:
+Support for storing multiple values under the same key (C++/Rust compatible):
 
 ```csharp
-// Add multiple tags
+// Add multiple values with same key (appends, not replaces)
 container.Add(new StringValue("tag", "important"));
 container.Add(new StringValue("tag", "urgent"));
 container.Add(new StringValue("tag", "review"));
 
-// Retrieve all tags
-var tags = container.ValueArray("tag");
-foreach (var tag in tags)
+// Get first value (backward compatible)
+var first = container.GetValue("tag");  // returns "important"
+
+// Get all values for a key
+var allTags = container.Store.GetValues("tag");  // returns all 3 values
+foreach (var tag in allTags)
 {
     Console.WriteLine(tag.ToString());
 }
+
+// Get count of values for a key
+int count = container.Store.GetValueCount("tag");  // returns 3
+
+// Set single value (replaces all existing values)
+container.Store.Set("tag", new StringValue("tag", "single"));
+
+// Remove specific value from key
+container.Store.RemoveValue("tag", specificValue);
+
+// Total values vs unique keys
+Console.WriteLine($"Unique keys: {container.Store.Size}");
+Console.WriteLine($"Total values: {container.Store.TotalValueCount}");
 ```
+
+**Key Features:**
+- `Add()` appends values (multi-value semantics)
+- `Set()` replaces all values (single-value semantics)
+- `Get()` returns first value for backward compatibility
+- `GetValues()` returns all values as `IReadOnlyList<Value>`
+- `GetValueCount()` returns number of values for a key
+- `RemoveValue()` removes specific value, auto-cleans empty keys
+- `TotalValueCount` property for total values across all keys
 
 ### 7. Array Values
 

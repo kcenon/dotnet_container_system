@@ -153,21 +153,46 @@ user.Add(new ContainerValue("address", address));
 
 ### 6. 동일 이름의 다중 값
 
-반복 값 지원:
+동일한 키에 여러 값을 저장하는 기능 (C++/Rust 호환):
 
 ```csharp
-// 여러 태그 추가
+// 동일 키에 여러 값 추가 (덮어쓰기가 아닌 추가)
 container.Add(new StringValue("tag", "중요"));
 container.Add(new StringValue("tag", "긴급"));
 container.Add(new StringValue("tag", "검토"));
 
-// 모든 태그 검색
-var tags = container.ValueArray("tag");
-foreach (var tag in tags)
+// 첫 번째 값 조회 (이전 버전 호환)
+var first = container.GetValue("tag");  // "중요" 반환
+
+// 키에 대한 모든 값 조회
+var allTags = container.Store.GetValues("tag");  // 3개 값 모두 반환
+foreach (var tag in allTags)
 {
     Console.WriteLine(tag.ToString());
 }
+
+// 키에 대한 값 개수 조회
+int count = container.Store.GetValueCount("tag");  // 3 반환
+
+// 단일 값 설정 (기존 모든 값 대체)
+container.Store.Set("tag", new StringValue("tag", "단일"));
+
+// 특정 값만 제거
+container.Store.RemoveValue("tag", specificValue);
+
+// 전체 값 수 vs 고유 키 수
+Console.WriteLine($"고유 키 수: {container.Store.Size}");
+Console.WriteLine($"전체 값 수: {container.Store.TotalValueCount}");
 ```
+
+**주요 기능:**
+- `Add()` - 값 추가 (다중 값 의미론)
+- `Set()` - 모든 값 대체 (단일 값 의미론)
+- `Get()` - 첫 번째 값 반환 (이전 버전 호환)
+- `GetValues()` - 모든 값을 `IReadOnlyList<Value>`로 반환
+- `GetValueCount()` - 키에 대한 값 개수 반환
+- `RemoveValue()` - 특정 값 제거, 빈 키 자동 정리
+- `TotalValueCount` - 모든 키의 전체 값 수
 
 ---
 
