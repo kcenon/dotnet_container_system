@@ -114,6 +114,12 @@ scripts\build.bat       # Windows (CMD)
 - **Python compatible**: Works with python_container_system
 - **Universal JSON**: JSON v2.0 adapter for any language
 
+### Dependency Injection Support
+- **IServiceCollection integration**: `AddContainerSystem()` extension method
+- **Factory pattern**: `IValueContainerFactory` for container creation
+- **Serializer abstraction**: `IWireProtocolSerializer` for wire protocol operations
+- **Configurable options**: Thread safety and other settings via DI
+
 📚 **[Complete Features →](docs/FEATURES.md)**
 
 ## Performance
@@ -261,6 +267,45 @@ Parallel.For(0, 1000, i =>
 // Thread-safe reads
 var values = container.Values();
 Console.WriteLine($"Total: {container.Count}");
+```
+
+## Dependency Injection
+
+```csharp
+using ContainerSystem.DI;
+using Microsoft.Extensions.DependencyInjection;
+
+// Register services in Startup.cs or Program.cs
+services.AddContainerSystem();
+
+// Or with options
+services.AddContainerSystem(options =>
+{
+    options.EnableThreadSafetyByDefault = true;
+});
+
+// Inject and use in your service
+public class MyMessageService
+{
+    private readonly IValueContainerFactory _factory;
+    private readonly IWireProtocolSerializer _serializer;
+
+    public MyMessageService(
+        IValueContainerFactory factory,
+        IWireProtocolSerializer serializer)
+    {
+        _factory = factory;
+        _serializer = serializer;
+    }
+
+    public byte[] CreateMessage(string action, int priority)
+    {
+        using var container = _factory.Create("command");
+        container.Add(new StringValue("action", action));
+        container.Add(new IntValue("priority", priority));
+        return _serializer.SerializeToBytes(container);
+    }
+}
 ```
 
 ## Comparison with C++ Version

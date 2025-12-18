@@ -139,10 +139,18 @@ public static class WireProtocol
     /// </summary>
     /// <param name="wireData">The wire protocol string</param>
     /// <param name="container">The deserialized container if successful</param>
-    /// <returns>True if deserialization succeeded</returns>
+    /// <returns>True if deserialization succeeded and wire data is valid format</returns>
     public static bool TryDeserialize(string wireData, out ValueContainer? container)
     {
         container = null;
+
+        if (string.IsNullOrEmpty(wireData))
+            return false;
+
+        // Check for valid wire protocol format markers
+        if (!wireData.Contains("@header={{") || !wireData.Contains("@data={{"))
+            return false;
+
         try
         {
             container = Deserialize(wireData);

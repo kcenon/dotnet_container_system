@@ -2,8 +2,8 @@
 
 > **Language:** **English**
 
-**Last Updated:** 2025-11-26
-**Version:** 1.0.0
+**Last Updated:** 2025-12-18
+**Version:** 1.1.0
 
 Complete API documentation for .NET Container System with code examples and usage patterns.
 
@@ -17,7 +17,12 @@ Complete API documentation for .NET Container System with code examples and usag
    - [Value (Abstract)](#value-abstract)
 2. [Messaging](#messaging)
    - [ContainerBuilder](#containerbuilder)
-3. [Value Types](#value-types)
+3. [Dependency Injection](#dependency-injection)
+   - [ServiceCollectionExtensions](#servicecollectionextensions)
+   - [IValueContainerFactory](#ivaluecontainerfactory)
+   - [IWireProtocolSerializer](#iwireprotocolserializer)
+   - [ContainerSystemOptions](#containersystemoptions)
+4. [Value Types](#value-types)
    - [NullValue](#nullvalue)
    - [BoolValue](#boolvalue)
    - [Numeric Values](#numeric-values)
@@ -25,12 +30,12 @@ Complete API documentation for .NET Container System with code examples and usag
    - [BytesValue](#bytesvalue)
    - [ContainerValue](#containervalue)
    - [ArrayValue](#arrayvalue)
-4. [Serialization](#serialization)
+5. [Serialization](#serialization)
    - [WireProtocol](#wireprotocol)
    - [JsonV2Adapter](#jsonv2adapter)
-5. [Enumerations](#enumerations)
+6. [Enumerations](#enumerations)
    - [ValueTypes](#valuetypes)
-6. [Usage Examples](#usage-examples)
+7. [Usage Examples](#usage-examples)
 
 ---
 
@@ -431,6 +436,307 @@ var container2 = new ContainerBuilder()
         new StringValue("tag", "urgent"),
         new IntValue("priority", 1))
     .Build();
+```
+
+---
+
+## Dependency Injection
+
+The container system provides first-class support for .NET dependency injection through `Microsoft.Extensions.DependencyInjection`.
+
+### ServiceCollectionExtensions
+
+Extension methods for registering container system services.
+
+```csharp
+namespace ContainerSystem.DI;
+
+public static class ServiceCollectionExtensions
+```
+
+#### Methods
+
+```csharp
+// Register services with default options
+public static IServiceCollection AddContainerSystem(this IServiceCollection services)
+
+// Register services with custom options
+public static IServiceCollection AddContainerSystem(
+    this IServiceCollection services,
+    Action<ContainerSystemOptions> configure)
+```
+
+#### Example: Basic Registration
+
+```csharp
+using ContainerSystem.DI;
+using Microsoft.Extensions.DependencyInjection;
+
+// In Program.cs or Startup.cs
+var services = new ServiceCollection();
+services.AddContainerSystem();
+
+// Build service provider
+var provider = services.BuildServiceProvider();
+```
+
+#### Example: With Options
+
+```csharp
+services.AddContainerSystem(options =>
+{
+    options.EnableThreadSafetyByDefault = true;
+});
+```
+
+---
+
+### IValueContainerFactory
+
+Factory interface for creating `ValueContainer` instances.
+
+```csharp
+namespace ContainerSystem.DI;
+
+public interface IValueContainerFactory
+```
+
+#### Methods
+
+```csharp
+// Create empty container
+ValueContainer Create()
+
+// Create container with message type
+ValueContainer Create(string messageType)
+
+// Create container with full metadata
+ValueContainer Create(
+    string sourceId,
+    string sourceSubId,
+    string targetId,
+    string targetSubId,
+    string messageType,
+    string version = "1.0.0.0")
+
+// Deserialize from JSON
+ValueContainer FromJson(string jsonData)
+
+// Deserialize from bytes
+ValueContainer FromBytes(byte[] data)
+
+// Create a fluent builder
+ContainerBuilder CreateBuilder()
+```
+
+#### Example
+
+```csharp
+public class OrderService
+{
+    private readonly IValueContainerFactory _factory;
+
+    public OrderService(IValueContainerFactory factory)
+    {
+        _factory = factory;
+    }
+
+    public ValueContainer CreateOrder(string customerId, decimal amount)
+    {
+        using var container = _factory.Create("order");
+        container.SetSource("order_service", "main");
+        container.Add(new StringValue("customer_id", customerId));
+        container.Add(new DoubleValue("amount", (double)amount));
+        return container;
+    }
+
+    public ValueContainer CreateOrderWithBuilder(string customerId, decimal amount)
+    {
+        return _factory.CreateBuilder()
+            .WithMessageType("order")
+            .WithSource("order_service", "main")
+            .WithValue(new StringValue("customer_id", customerId))
+            .WithValue(new DoubleValue("amount", (double)amount))
+            .Build();
+    }
+}
+```
+
+---
+
+### IWireProtocolSerializer
+
+Service interface for C++ Wire Protocol serialization.
+
+```csharp
+namespace ContainerSystem.DI;
+
+public interface IWireProtocolSerializer
+```
+
+#### Methods
+
+```csharp
+// Serialize to wire protocol string
+string Serialize(ValueContainer container)
+
+// Serialize to wire protocol bytes
+byte[] SerializeToBytes(ValueContainer container)
+
+// Deserialize from wire protocol string
+ValueContainer Deserialize(string wireData)
+
+// Deserialize from wire protocol bytes
+ValueContainer Deserialize(byte[] wireData)
+
+// Try deserialize without exceptions
+bool TryDeserialize(string wireData, out ValueContainer? container)
+```
+
+#### Example
+
+```csharp
+public class CppBridgeService
+{
+    private readonly IValueContainerFactory _factory;
+    private readonly IWireProtocolSerializer _serializer;
+
+    public CppBridgeService(
+        IValueContainerFactory factory,
+        IWireProtocolSerializer serializer)
+    {
+        _factory = factory;
+        _serializer = serializer;
+    }
+
+    public byte[] PrepareForCpp(string messageType, Dictionary<string, object> data)
+    {
+        using var container = _factory.Create(messageType);
+        foreach (var kvp in data)
+        {
+            container.Add(CreateValue(kvp.Key, kvp.Value));
+        }
+        return _serializer.SerializeToBytes(container);
+    }
+
+    public Dictionary<string, object> ParseFromCpp(byte[] wireData)
+    {
+        using var container = _serializer.Deserialize(wireData);
+        var result = new Dictionary<string, object>();
+        foreach (var value in container.Values())
+        {
+            result[value.Name] = value.Data();
+        }
+        return result;
+    }
+
+    private Value CreateValue(string name, object value) => value switch
+    {
+        string s => new StringValue(name, s),
+        int i => new IntValue(name, i),
+        double d => new DoubleValue(name, d),
+        bool b => new BoolValue(name, b),
+        _ => new StringValue(name, value?.ToString() ?? "")
+    };
+}
+```
+
+---
+
+### ContainerSystemOptions
+
+Configuration options for the container system.
+
+```csharp
+namespace ContainerSystem.DI;
+
+public class ContainerSystemOptions
+```
+
+#### Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `EnableThreadSafetyByDefault` | `bool` | `false` | Enable thread safety for all created containers |
+
+#### Example
+
+```csharp
+// High-concurrency scenario
+services.AddContainerSystem(options =>
+{
+    options.EnableThreadSafetyByDefault = true;
+});
+
+// Single-threaded scenario (better performance)
+services.AddContainerSystem(options =>
+{
+    options.EnableThreadSafetyByDefault = false;
+});
+```
+
+---
+
+### Complete DI Example
+
+```csharp
+using ContainerSystem.DI;
+using ContainerSystem.Values;
+using Microsoft.Extensions.DependencyInjection;
+
+// Setup
+var services = new ServiceCollection();
+services.AddContainerSystem(options =>
+{
+    options.EnableThreadSafetyByDefault = true;
+});
+
+// Register your services
+services.AddScoped<IMessageProcessor, MessageProcessor>();
+
+var provider = services.BuildServiceProvider();
+
+// Usage
+public class MessageProcessor : IMessageProcessor
+{
+    private readonly IValueContainerFactory _factory;
+    private readonly IWireProtocolSerializer _serializer;
+
+    public MessageProcessor(
+        IValueContainerFactory factory,
+        IWireProtocolSerializer serializer)
+    {
+        _factory = factory;
+        _serializer = serializer;
+    }
+
+    public async Task<byte[]> ProcessRequest(byte[] request)
+    {
+        // Deserialize incoming request
+        using var requestContainer = _serializer.Deserialize(request);
+
+        // Process the request
+        var action = requestContainer.GetValue("action")?.ToString();
+        var result = await ExecuteAction(action);
+
+        // Create response
+        using var response = _factory.CreateBuilder()
+            .WithMessageType("response")
+            .WithSource(requestContainer.TargetId, requestContainer.TargetSubId)
+            .WithTarget(requestContainer.SourceId, requestContainer.SourceSubId)
+            .WithValue(new IntValue("status", 200))
+            .WithValue(new StringValue("result", result))
+            .Build();
+
+        return _serializer.SerializeToBytes(response);
+    }
+
+    private Task<string> ExecuteAction(string? action)
+    {
+        // Implementation
+        return Task.FromResult($"Executed: {action}");
+    }
+}
 ```
 
 ---

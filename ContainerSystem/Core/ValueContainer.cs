@@ -566,17 +566,17 @@ public class ValueContainer : IEnumerable<Value>, IDisposable
         {
             return valueType switch
             {
-                ValueTypes.BoolValue => new BoolValue(name, dataElem.GetBoolean()),
-                ValueTypes.ShortValue => new ShortValue(name, dataElem.GetInt16()),
-                ValueTypes.UShortValue => new UShortValue(name, dataElem.GetUInt16()),
-                ValueTypes.IntValue => new IntValue(name, dataElem.GetInt32()),
-                ValueTypes.UIntValue => new UIntValue(name, dataElem.GetUInt32()),
-                ValueTypes.LongValue => new LongValue(name, dataElem.GetInt64()),
-                ValueTypes.ULongValue => new ULongValue(name, dataElem.GetUInt64()),
-                ValueTypes.LLongValue => new LLongValue(name, dataElem.GetInt64()),
-                ValueTypes.ULLongValue => new ULLongValue(name, dataElem.GetUInt64()),
-                ValueTypes.FloatValue => new FloatValue(name, dataElem.GetSingle()),
-                ValueTypes.DoubleValue => new DoubleValue(name, dataElem.GetDouble()),
+                ValueTypes.BoolValue => new BoolValue(name, ParseBoolFromJson(dataElem)),
+                ValueTypes.ShortValue => new ShortValue(name, ParseInt16FromJson(dataElem)),
+                ValueTypes.UShortValue => new UShortValue(name, ParseUInt16FromJson(dataElem)),
+                ValueTypes.IntValue => new IntValue(name, ParseInt32FromJson(dataElem)),
+                ValueTypes.UIntValue => new UIntValue(name, ParseUInt32FromJson(dataElem)),
+                ValueTypes.LongValue => new LongValue(name, ParseInt64FromJson(dataElem)),
+                ValueTypes.ULongValue => new ULongValue(name, ParseUInt64FromJson(dataElem)),
+                ValueTypes.LLongValue => new LLongValue(name, ParseInt64FromJson(dataElem)),
+                ValueTypes.ULLongValue => new ULLongValue(name, ParseUInt64FromJson(dataElem)),
+                ValueTypes.FloatValue => new FloatValue(name, ParseSingleFromJson(dataElem)),
+                ValueTypes.DoubleValue => new DoubleValue(name, ParseDoubleFromJson(dataElem)),
                 ValueTypes.StringValue => new StringValue(name, dataElem.GetString() ?? string.Empty),
                 ValueTypes.BytesValue => ParseBytesValue(name, element),
                 _ => null
@@ -586,6 +586,76 @@ public class ValueContainer : IEnumerable<Value>, IDisposable
         {
             return null;
         }
+    }
+
+    private static bool ParseBoolFromJson(JsonElement elem)
+    {
+        if (elem.ValueKind == JsonValueKind.True) return true;
+        if (elem.ValueKind == JsonValueKind.False) return false;
+        if (elem.ValueKind == JsonValueKind.String)
+        {
+            var str = elem.GetString();
+            return str == "1" || str?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+        }
+        if (elem.ValueKind == JsonValueKind.Number)
+            return elem.GetInt32() != 0;
+        return false;
+    }
+
+    private static short ParseInt16FromJson(JsonElement elem)
+    {
+        if (elem.ValueKind == JsonValueKind.Number)
+            return elem.GetInt16();
+        return short.Parse(elem.GetString() ?? "0");
+    }
+
+    private static ushort ParseUInt16FromJson(JsonElement elem)
+    {
+        if (elem.ValueKind == JsonValueKind.Number)
+            return elem.GetUInt16();
+        return ushort.Parse(elem.GetString() ?? "0");
+    }
+
+    private static int ParseInt32FromJson(JsonElement elem)
+    {
+        if (elem.ValueKind == JsonValueKind.Number)
+            return elem.GetInt32();
+        return int.Parse(elem.GetString() ?? "0");
+    }
+
+    private static uint ParseUInt32FromJson(JsonElement elem)
+    {
+        if (elem.ValueKind == JsonValueKind.Number)
+            return elem.GetUInt32();
+        return uint.Parse(elem.GetString() ?? "0");
+    }
+
+    private static long ParseInt64FromJson(JsonElement elem)
+    {
+        if (elem.ValueKind == JsonValueKind.Number)
+            return elem.GetInt64();
+        return long.Parse(elem.GetString() ?? "0");
+    }
+
+    private static ulong ParseUInt64FromJson(JsonElement elem)
+    {
+        if (elem.ValueKind == JsonValueKind.Number)
+            return elem.GetUInt64();
+        return ulong.Parse(elem.GetString() ?? "0");
+    }
+
+    private static float ParseSingleFromJson(JsonElement elem)
+    {
+        if (elem.ValueKind == JsonValueKind.Number)
+            return elem.GetSingle();
+        return float.Parse(elem.GetString() ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static double ParseDoubleFromJson(JsonElement elem)
+    {
+        if (elem.ValueKind == JsonValueKind.Number)
+            return elem.GetDouble();
+        return double.Parse(elem.GetString() ?? "0", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static BytesValue? ParseBytesValue(string name, JsonElement element)
